@@ -1,4 +1,5 @@
 import type { FileInfo, FileListResponse, ChatResponse, ApiResponse, StreamMessageCallback, SkillCard, SkillCardCreateRequest, SkillCardUpdateRequest, SkillFile, SkillFileContent } from '../types';
+import { API_BASE_URL } from '../config';
 
 // 工具函数：格式化文件大小
 export const formatFileSize = (bytes: number): string => {
@@ -38,36 +39,36 @@ export interface ApiService {
 // 真实API服务
 export const apiService: ApiService = {
   getFileList: async () => {
-    const response = await fetch('http://localhost:5000/api/files');
+    const response = await fetch(`${API_BASE_URL}/api/files`);
     return response.json();
   },
   getFile: async (fileId) => {
-    const response = await fetch(`http://localhost:5000/api/files/${fileId}`);
+    const response = await fetch(`${API_BASE_URL}/api/files/${fileId}`);
     return response.json();
   },
   uploadFile: async (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch('http://localhost:5000/api/files/upload', {
+    const response = await fetch(`${API_BASE_URL}/api/files/upload`, {
       method: 'POST',
       body: formData,
     });
     return response.json();
   },
   deleteFile: async (fileId) => {
-    const response = await fetch(`http://localhost:5000/api/files/${fileId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/files/${fileId}`, {
       method: 'DELETE',
     });
     return response.json();
   },
   deleteAllFiles: async () => {
-    const response = await fetch('http://localhost:5000/api/files/all', {
+    const response = await fetch(`${API_BASE_URL}/api/files/all`, {
       method: 'DELETE',
     });
     return response.json();
   },
   sendMessage: async (message) => {
-    const response = await fetch('http://localhost:5000/api/chat', {
+    const response = await fetch(`${API_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message }),
@@ -76,7 +77,7 @@ export const apiService: ApiService = {
   },
   sendMessageStream: async (message, onChunk) => {
     console.log('Starting stream request for message:', message);
-    const response = await fetch('http://localhost:5000/api/chat/stream', {
+    const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message }),
@@ -140,17 +141,17 @@ export const apiService: ApiService = {
   // 技能卡片 API 实现
   getSkillCards: async (searchKeyword = '') => {
     const url = searchKeyword
-      ? `http://localhost:5000/api/skills?search=${encodeURIComponent(searchKeyword)}`
-      : 'http://localhost:5000/api/skills';
+      ? `${API_BASE_URL}/api/skills?search=${encodeURIComponent(searchKeyword)}`
+      : `${API_BASE_URL}/api/skills`;
     const response = await fetch(url);
     return response.json();
   },
   getSkillCard: async (cardId) => {
-    const response = await fetch(`http://localhost:5000/api/skills/${cardId}`);
+    const response = await fetch(`${API_BASE_URL}/api/skills/${cardId}`);
     return response.json();
   },
   createSkillCard: async (request) => {
-    const response = await fetch('http://localhost:5000/api/skills', {
+    const response = await fetch(`${API_BASE_URL}/api/skills`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
@@ -158,7 +159,7 @@ export const apiService: ApiService = {
     return response.json();
   },
   updateSkillCard: async (cardId, request) => {
-    const response = await fetch(`http://localhost:5000/api/skills/${cardId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/skills/${cardId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
@@ -166,40 +167,40 @@ export const apiService: ApiService = {
     return response.json();
   },
   deleteSkillCard: async (cardId) => {
-    const response = await fetch(`http://localhost:5000/api/skills/${cardId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/skills/${cardId}`, {
       method: 'DELETE',
     });
     return response.json();
   },
   deleteAllSkillCards: async () => {
-    const response = await fetch('http://localhost:5000/api/skills', {
+    const response = await fetch(`${API_BASE_URL}/api/skills`, {
       method: 'DELETE',
     });
     return response.json();
   },
   publishSkillCard: async (cardId) => {
-    const response = await fetch(`http://localhost:5000/api/skills/${cardId}/publish`, {
+    const response = await fetch(`${API_BASE_URL}/api/skills/${cardId}/publish`, {
       method: 'PUT',
     });
     return response.json();
   },
   unpublishSkillCard: async (cardId) => {
-    const response = await fetch(`http://localhost:5000/api/skills/${cardId}/unpublish`, {
+    const response = await fetch(`${API_BASE_URL}/api/skills/${cardId}/unpublish`, {
       method: 'PUT',
     });
     return response.json();
   },
   // 技能文件 API 实现
   listSkillFiles: async (skillId) => {
-    const response = await fetch(`http://localhost:5000/api/skills/${skillId}/files`);
+    const response = await fetch(`${API_BASE_URL}/api/skills/${skillId}/files`);
     return response.json();
   },
   getSkillFileContent: async (skillId, path) => {
-    const response = await fetch(`http://localhost:5000/api/skills/${skillId}/files/content?path=${encodeURIComponent(path)}`);
+    const response = await fetch(`${API_BASE_URL}/api/skills/${skillId}/files/content?path=${encodeURIComponent(path)}`);
     return response.json();
   },
   createSkillFile: async (skillId, path, content) => {
-    const response = await fetch(`http://localhost:5000/api/skills/${skillId}/files`, {
+    const response = await fetch(`${API_BASE_URL}/api/skills/${skillId}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, content }),
@@ -207,7 +208,7 @@ export const apiService: ApiService = {
     return response.json();
   },
   updateSkillFile: async (skillId, path, newPath, content) => {
-    const response = await fetch(`http://localhost:5000/api/skills/${skillId}/files`, {
+    const response = await fetch(`${API_BASE_URL}/api/skills/${skillId}/files`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, newPath, content }),
@@ -215,7 +216,7 @@ export const apiService: ApiService = {
     return response.json();
   },
   deleteSkillFile: async (skillId, path) => {
-    const response = await fetch(`http://localhost:5000/api/skills/${skillId}/files?path=${encodeURIComponent(path)}`, {
+    const response = await fetch(`${API_BASE_URL}/api/skills/${skillId}/files?path=${encodeURIComponent(path)}`, {
       method: 'DELETE',
     });
     return response.json();

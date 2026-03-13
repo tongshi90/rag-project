@@ -57,6 +57,239 @@ python run.py   # http://0.0.0.0:5000
 SILICONFLOW_API_KEY=your_api_key_here
 ```
 
+## Docker 部署
+
+### 快速启动（使用 Docker Compose）
+
+```bash
+# 构建并启动所有服务
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+
+# 停止并删除数据卷
+docker-compose down -v
+```
+
+### 手动构建与运行
+
+#### 后端
+
+```bash
+# 进入后端目录
+cd backend
+
+# 构建镜像
+docker build -t rag-backend:latest .
+
+# 运行容器
+docker run -d \
+  --name rag-backend \
+  -p 5000:5000 \
+  --env SILICONFLOW_API_KEY=sk-edvfxjljpvthsvcgkikydaqxnktvcwhedacvcoddmxjgiexq \
+  rag-backend:latest
+
+# 查看日志
+docker logs -f rag-backend
+
+# 停止容器
+docker stop rag-backend
+docker rm rag-backend
+```
+
+#### 前端
+
+```bash
+# 进入前端目录
+cd frontend
+
+# 构建镜像
+docker build -t rag-frontend:latest .
+
+# 运行容器（使用 -e 参数配置后端地址）
+# 方式1：通过宿主机访问（适用于前后端在不同服务器）
+docker run -d \
+  --name rag-frontend \
+  -p 8085:80 \
+  -e API_BASE_URL=http://192.168.18.77:5000 \
+  rag-frontend:latest
+
+# 方式2：通过容器网络访问（适用于前后端在同一服务器）
+# 使用 --network host 或 --link 连接后端容器
+docker run -d \
+  --name rag-frontend \
+  -p 8085:80 \
+  -e API_BASE_URL=http://rag-backend:5000 \
+  --link rag-backend:rag-backend \
+  rag-frontend:latest
+
+# 方式3：本地开发环境（前后端在同一台机器）
+docker run -d \
+  --name rag-frontend \
+  -p 8085:80 \
+  -e API_BASE_URL=http://172.17.0.1:5000 \
+  rag-frontend:latest
+
+# 查看日志
+docker logs -f rag-frontend
+
+# 停止容器
+docker stop rag-frontend
+docker rm rag-frontend
+```
+
+**环境变量说明：**
+- `API_BASE_URL`: 后端 API 地址，前端会通过此地址访问后端
+- 当容器使用 `--network host` 时，可以使用 `localhost:5000`
+- 当容器独立网络时，需要使用宿主机 IP 或容器名称
+
+### 构建脚本
+
+将以下脚本保存为 `build.sh`（Linux/Mac）或 `build.bat`（Windows）：
+
+**build.sh**
+```bash
+#!/bin/bash
+echo "Building RAG System Docker images..."
+
+# 构建后端镜像
+echo "Building backend image..."
+cd backend
+docker build -t rag-backend:latest .
+cd ..
+
+# 构建前端镜像
+echo "Building frontend image..."
+cd frontend
+docker build -t rag-frontend:latest .
+cd ..
+
+echo "Build complete!"
+```
+
+**build.bat**
+```batch
+@echo off
+echo Building RAG System Docker images...
+
+REM 构建后端镜像
+echo Building backend image...
+cd backend
+docker build -t rag-backend:latest .
+cd ..
+
+REM 构建前端镜像
+echo Building frontend image...
+cd frontend
+docker build -t rag-frontend:latest .
+cd ..
+
+echo Build complete!
+pause
+```
+
+### 启动脚本
+
+将以下脚本保存为 `start.sh`（Linux/Mac）或 `start.bat`（Windows）：
+
+**start.sh**
+```bash
+#!/bin/bash
+echo "Starting RAG System..."
+
+# 获取本机 IP（Linux）
+LOCAL_IP=$(hostname -I | awk '{print $1}')
+# 如果获取失败，使用 Docker 网关 IP
+if [ -z "$LOCAL_IP" ]; then
+    LOCAL_IP="172.17.0.1"
+fi
+
+# 启动后端
+docker run -d \
+  --name rag-backend \
+  --restart unless-stopped \
+  -p 5000:5000 \
+  -v $(pwd)/backend/data:/app/data \
+  -v $(pwd)/backend/uploads:/app/uploads \
+  --env-file backend/.env \
+  rag-backend:latest
+
+# 启动前端（配置后端地址）
+docker run -d \
+  --name rag-frontend \
+  --restart unless-stopped \
+  -p 80:80 \
+  -e API_BASE_URL=http://${LOCAL_IP}:5000 \
+  --link rag-backend:rag-backend \
+  rag-frontend:latest
+
+echo "Services started!"
+echo "Frontend: http://localhost"
+echo "Backend: http://localhost:5000"
+echo "Frontend API URL: http://${LOCAL_IP}:5000"
+```
+
+**start.bat**
+```batch
+@echo off
+echo Starting RAG System...
+
+REM 获取本机 IP（Windows - 使用默认网关）
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do set LOCAL_IP=%%a
+set LOCAL_IP=%LOCAL_IP: =%
+if "%LOCAL_IP%"=="" set LOCAL_IP=172.17.0.1
+
+REM 启动后端
+docker run -d ^
+  --name rag-backend ^
+  --restart unless-stopped ^
+  -p 5000:5000 ^
+  -v %cd%\backend\data:/app/data ^
+  -v %cd%\backend\uploads:/app/uploads ^
+  --env-file backend\.env ^
+  rag-backend:latest
+
+REM 启动前端（配置后端地址）
+docker run -d ^
+  --name rag-frontend ^
+  --restart unless-stopped ^
+  -p 80:80 ^
+  -e API_BASE_URL=http://%LOCAL_IP%:5000 ^
+  --link rag-backend:rag-backend ^
+  rag-frontend:latest
+
+echo Services started!
+echo Frontend: http://localhost
+echo Backend: http://localhost:5000
+echo Frontend API URL: http://%LOCAL_IP%:5000
+pause
+```
+
+### 停止脚本
+
+**stop.sh**
+```bash
+#!/bin/bash
+echo "Stopping RAG System..."
+docker stop rag-backend rag-frontend
+docker rm rag-backend rag-frontend
+echo "Services stopped!"
+```
+
+**stop.bat**
+```batch
+@echo off
+echo Stopping RAG System...
+docker stop rag-backend rag-frontend
+docker rm rag-backend rag-frontend
+echo Services stopped!
+pause
+```
+
 ## 项目结构
 
 ```

@@ -32,7 +32,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # Default values
-DEFAULT_API_URL = "http://192.168.18.57:5000"
+DEFAULT_API_URL = "http://192.168.18.77:5000"
 DEFAULT_TIMEOUT = 120
 
 

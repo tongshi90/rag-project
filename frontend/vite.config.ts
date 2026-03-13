@@ -10,7 +10,7 @@ export default defineConfig({
     strictPort: true,  // 如果端口被占用则失败，而不是自动切换
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
       },
     },
