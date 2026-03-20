@@ -52,7 +52,7 @@ def get_absolute_file_path(relative_path):
     return str(PROJECT_ROOT / relative_path)
 
 
-def process_document_async(file_path, file_name, file_id):
+def process_document_async(file_path, file_name, file_id, kb_id: str = None):
     """
     异步处理文档（完整流程）
 
@@ -60,19 +60,22 @@ def process_document_async(file_path, file_name, file_id):
     1. 文档拆分 → 2. 异常检测 → 3. LLM 优化 → 4. 向量化存储
 
     Args:
-        file_path: PDF 文件绝对路径
+        file_path: 文件绝对路径
         file_name: 文件名
         file_id: 文档 ID
+        kb_id: 知识库 ID（可选）
     """
     def _process():
         try:
             print(f"\n{'='*60}")
             print(f"开始异步处理文档: {file_name}")
             print(f"文档 ID: {file_id}")
+            if kb_id:
+                print(f"知识库 ID: {kb_id}")
             print(f"{'='*60}\n")
 
             # 调用完整的文档处理流程
-            result = parse_pdf(file_path, file_id)
+            result = parse_pdf(file_path, file_id, kb_id)
 
             # 根据处理结果更新文件状态
             if result.get('success'):
@@ -113,25 +116,26 @@ def get_files():
 @api_bp.route('/files/upload', methods=['POST'])
 def upload_file():
     """
-    Upload a new file (PDF only)
+    Upload a new file (PDF and Word supported)
 
     处理流程：
     1. 生成文件 ID
-    2. 以 {file_id}.pdf 格式保存文件（避免同名文件冲突）
+    2. 以 {file_id}.{ext} 格式保存文件（避免同名文件冲突）
     3. 创建数据库记录
     4. 异步执行完整文档处理流程（拆分 → 验证 → 优化 → 向量化）
     """
     if 'file' not in request.files:
-        return jsonify({'success': False, 'error': 'No file provided'}), 400
+        return jsonify({'success': False, 'error': '未上传文件'}), 400
 
     file = request.files['file']
     if file.filename == '':
-        return jsonify({'success': False, 'error': 'No file selected'}), 400
+        return jsonify({'success': False, 'error': '未选择文件'}), 400
 
-    # Check file format - only PDF supported
+    # Check file format - support PDF and Word
     file_ext = os.path.splitext(file.filename)[1].lower()
-    if file_ext != '.pdf':
-        return jsonify({'success': False, 'error': '暂不支持此格式'}), 400
+    supported_formats = ['.pdf', '.docx', '.doc']
+    if file_ext not in supported_formats:
+        return jsonify({'success': False, 'error': f'暂不支持此格式，支持的格式: {", ".join(supported_formats)}'}), 400
 
     # 先生成文件 ID（用于文件名，使用毫秒级时间戳）
     file_id = str(int(datetime.now().timestamp() * 1000))
@@ -139,8 +143,8 @@ def upload_file():
     # 获取上传目录
     upload_dir = get_upload_dir()
 
-    # 保存文件（使用 file_id.pdf 作为文件名，避免同名冲突）
-    file_path = upload_dir / f"{file_id}.pdf"
+    # 保存文件（使用 file_id.{ext} 作为文件名，避免同名冲突）
+    file_path = upload_dir / f"{file_id}{file_ext}"
     file.save(str(file_path))
 
     # Get file size
@@ -149,12 +153,19 @@ def upload_file():
     # 存储相对路径到数据库（跨平台兼容）
     relative_path = get_relative_file_path(str(file_path))
 
+    # 根据文件扩展名确定 MIME 类型
+    mime_types = {
+        '.pdf': 'application/pdf',
+        '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        '.doc': 'application/msword'
+    }
+
     # Create file record
     new_file = File(
         id=file_id,
         name=file.filename,  # 保留原始文件名
         size=file_size,
-        file_type=file.content_type or 'application/pdf',
+        file_type=file.content_type or mime_types.get(file_ext, 'application/octet-stream'),
         upload_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         status='parsing',  # Initial status, will be updated after processing
         file_path=relative_path  # 存储相对路径
@@ -180,7 +191,7 @@ def get_file(file_id):
     """
     file = db.get_file_by_id(file_id)
     if not file:
-        return jsonify({'success': False, 'error': 'File not found'}), 404
+        return jsonify({'success': False, 'error': '文件不存在'}), 404
 
     return jsonify({
         'success': True,
@@ -266,7 +277,7 @@ def get_file_stats(file_id):
     # Get file info
     file = db.get_file_by_id(file_id)
     if not file:
-        return jsonify({'success': False, 'error': 'File not found'}), 404
+        return jsonify({'success': False, 'error': '文件不存在'}), 404
 
     # Get vector stats
     from app.services.document_processing.embedding import get_vector_store

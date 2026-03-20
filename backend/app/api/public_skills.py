@@ -51,30 +51,28 @@ def get_skill_folder(skill_code: str) -> Path:
 @api_bp.route('/public/skills', methods=['GET'])
 def get_published_skills():
     """
-    Get list of published skills (public API)
+    Get list of all skills (public API)
 
     Query params:
         - search: keyword to search in title or skill_code (optional)
 
-    Returns only published skills with limited fields:
+    Returns all skills with limited fields:
     - title: skill title
     - description: skill description
     - skillCode: skill code
-    - downloadUrl: zip package download URL
+    - status: 'published' or 'developing'
+    - downloadUrl: zip package download URL (only for published skills)
     """
     keyword = request.args.get('search', '').strip()
 
-    # Get all skill cards and filter
+    # Get all skill cards
     all_skills = skill_card_db.get_all_skill_cards()
-
-    # Filter by published status
-    published_skills = [s for s in all_skills if s.get('published', False)]
 
     # Filter by keyword if provided
     if keyword:
         keyword_lower = keyword.lower()
-        published_skills = [
-            s for s in published_skills
+        all_skills = [
+            s for s in all_skills
             if keyword_lower in s.get('title', '').lower()
             or keyword_lower in s.get('skillCode', '').lower()
         ]
@@ -82,21 +80,29 @@ def get_published_skills():
     # Get base URL for downloads (supports reverse proxy)
     base_url = get_base_url()
 
-    # Return only required fields with download URL
+    # Return only required fields
     result = []
-    for skill in published_skills:
+    for skill in all_skills:
         skill_code = skill['skillCode']
-        result.append({
+        is_published = skill.get('published', False)
+
+        skill_data = {
             'title': skill['title'],
             'description': skill['description'],
             'skillCode': skill_code,
-            'downloadUrl': f"{base_url}/api/public/skills/{skill_code}/download/zip"
-        })
+            'status': 'published' if is_published else 'developing'
+        }
+
+        # Only add downloadUrl for published skills
+        if is_published:
+            skill_data['downloadUrl'] = f"{base_url}/api/public/skills/{skill_code}/download/zip"
+
+        result.append(skill_data)
 
     return jsonify({
         'code': 0,
         'data': result,
-        'message': 'Success'
+        'message': '操作成功'
     })
 
 
@@ -116,8 +122,8 @@ def get_skill_files_download(skill_code):
     if not skill_code:
         return jsonify({
             'code': 400,
-            'error': 'Skill code is required',
-            'message': 'Skill code is required'
+            'error': '技能代码不能为空',
+            'message': '技能代码不能为空'
         }), 400
 
     # Check if skill exists and is published
@@ -125,15 +131,15 @@ def get_skill_files_download(skill_code):
     if not skill_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill not found',
-            'message': 'Skill not found'
+            'error': '技能不存在',
+            'message': '技能不存在'
         }), 404
 
     if not skill_card.published:
         return jsonify({
             'code': 403,
-            'error': 'Skill is not published',
-            'message': 'Skill is not available for public access'
+            'error': '技能未发布',
+            'message': '技能未公开，无法访问'
         }), 403
 
     skill_folder = get_skill_folder(skill_code)
@@ -145,7 +151,7 @@ def get_skill_files_download(skill_code):
                 'files': [],
                 'folders': []
             },
-            'message': 'No files found'
+            'message': '未找到文件'
         })
 
     # Get base URL for downloads (supports reverse proxy)
@@ -182,7 +188,7 @@ def get_skill_files_download(skill_code):
             'files': files,
             'folders': folders
         },
-        'message': 'Success'
+        'message': '操作成功'
     })
 
 
@@ -201,8 +207,8 @@ def download_skill_file(skill_code):
     if not skill_code:
         return jsonify({
             'code': 400,
-            'error': 'Skill code is required',
-            'message': 'Skill code is required'
+            'error': '技能代码不能为空',
+            'message': '技能代码不能为空'
         }), 400
 
     # Check if skill exists and is published
@@ -210,15 +216,15 @@ def download_skill_file(skill_code):
     if not skill_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill not found',
-            'message': 'Skill not found'
+            'error': '技能不存在',
+            'message': '技能不存在'
         }), 404
 
     if not skill_card.published:
         return jsonify({
             'code': 403,
-            'error': 'Skill is not published',
-            'message': 'Skill is not available for public access'
+            'error': '技能未发布',
+            'message': '技能未公开，无法访问'
         }), 403
 
     file_path = request.args.get('path', '').strip()
@@ -226,8 +232,8 @@ def download_skill_file(skill_code):
     if not file_path:
         return jsonify({
             'code': 400,
-            'error': 'File path is required',
-            'message': 'File path is required'
+            'error': '文件路径不能为空',
+            'message': '文件路径不能为空'
         }), 400
 
     # Security: prevent path traversal (cross-platform compatible)
@@ -235,8 +241,8 @@ def download_skill_file(skill_code):
     if '..' in file_path or FilePath(file_path).is_absolute():
         return jsonify({
             'code': 400,
-            'error': 'Invalid file path',
-            'message': 'Invalid file path'
+            'error': '无效的文件路径',
+            'message': '无效的文件路径'
         }), 400
 
     skill_folder = get_skill_folder(skill_code)
@@ -245,15 +251,15 @@ def download_skill_file(skill_code):
     if not file_path.exists():
         return jsonify({
             'code': 404,
-            'error': 'File not found',
-            'message': 'File not found'
+            'error': '文件不存在',
+            'message': '文件不存在'
         }), 404
 
     if not file_path.is_file():
         return jsonify({
             'code': 400,
-            'error': 'Path is not a file',
-            'message': 'Cannot download a directory'
+            'error': '路径不是文件',
+            'message': '无法下载目录'
         }), 400
 
     # Send file for download
@@ -266,8 +272,8 @@ def download_skill_file(skill_code):
     except Exception as e:
         return jsonify({
             'code': 500,
-            'error': f'Failed to download file: {str(e)}',
-            'message': f'Failed to download file: {str(e)}'
+            'error': f'下载文件失败: {str(e)}',
+            'message': f'下载文件失败: {str(e)}'
         }), 500
 
 
@@ -286,8 +292,8 @@ def download_skill_zip(skill_code):
     if not skill_code:
         return jsonify({
             'code': 400,
-            'error': 'Skill code is required',
-            'message': 'Skill code is required'
+            'error': '技能代码不能为空',
+            'message': '技能代码不能为空'
         }), 400
 
     # Check if skill exists and is published
@@ -295,15 +301,15 @@ def download_skill_zip(skill_code):
     if not skill_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill not found',
-            'message': 'Skill not found'
+            'error': '技能不存在',
+            'message': '技能不存在'
         }), 404
 
     if not skill_card.published:
         return jsonify({
             'code': 403,
-            'error': 'Skill is not published',
-            'message': 'Skill is not available for public access'
+            'error': '技能未发布',
+            'message': '技能未公开，无法访问'
         }), 403
 
     # Get the published directory and zip file path
@@ -313,8 +319,8 @@ def download_skill_zip(skill_code):
     if not zip_path.exists():
         return jsonify({
             'code': 404,
-            'error': 'Skill package not found',
-            'message': 'The skill package may not have been created. Please contact the administrator.'
+            'error': '技能包不存在',
+            'message': '技能包可能尚未创建，请联系管理员'
         }), 404
 
     # Send zip file for download
@@ -328,6 +334,6 @@ def download_skill_zip(skill_code):
     except Exception as e:
         return jsonify({
             'code': 500,
-            'error': f'Failed to download skill package: {str(e)}',
-            'message': f'Failed to download skill package: {str(e)}'
+            'error': f'下载技能包失败: {str(e)}',
+            'message': f'下载技能包失败: {str(e)}'
         }), 500

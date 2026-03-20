@@ -1,5 +1,31 @@
-import type { FileInfo, FileListResponse, ChatResponse, ApiResponse, StreamMessageCallback, SkillCard, SkillCardCreateRequest, SkillCardUpdateRequest, SkillFile, SkillFileContent } from '../types';
-import { API_BASE_URL } from '../config';
+import type {
+  FileInfo,
+  FileListListResponse,
+  ApiResponse,
+  SkillCard,
+  SkillCardCreateRequest,
+  SkillCardUpdateRequest,
+  SkillFile,
+  SkillFileContent,
+  KnowledgeBase,
+  KnowledgeBaseCreateRequest,
+  KnowledgeBaseUpdateRequest,
+  KnowledgeBaseListResponse,
+  RetrievalTestHistory,
+  RetrievalTestHistoryListResponse,
+  FileChunkListResponse
+} from '../types';
+
+// 获取API基础URL
+const getApiBaseUrl = (): string => {
+  const envBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
+  if (!envBaseUrl || envBaseUrl === '{{API_BASE_URL}}') {
+    return 'http://127.0.0.1:5000';
+  }
+  return envBaseUrl;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // 工具函数：格式化文件大小
 export const formatFileSize = (bytes: number): string => {
@@ -12,13 +38,11 @@ export const formatFileSize = (bytes: number): string => {
 
 // API服务类型
 export interface ApiService {
-  getFileList: () => Promise<ApiResponse<FileListResponse>>;
+  getFileList: () => Promise<ApiResponse<FileListListResponse>>;
   getFile: (fileId: string) => Promise<ApiResponse<FileInfo>>;
   uploadFile: (file: File) => Promise<ApiResponse<FileInfo>>;
   deleteFile: (fileId: string) => Promise<ApiResponse<void>>;
   deleteAllFiles: () => Promise<ApiResponse<void>>;
-  sendMessage: (message: string) => Promise<ApiResponse<ChatResponse>>;
-  sendMessageStream: (message: string, onChunk: StreamMessageCallback) => Promise<void>;
   // 技能卡片 API
   getSkillCards: (searchKeyword?: string) => Promise<{ code: number; data: SkillCard[]; message: string }>;
   getSkillCard: (cardId: string) => Promise<{ code: number; data: SkillCard; message: string }>;
@@ -31,9 +55,25 @@ export interface ApiService {
   // 技能文件 API
   listSkillFiles: (skillId: string) => Promise<{ code: number; data: SkillFile[]; message: string }>;
   getSkillFileContent: (skillId: string, path: string) => Promise<{ code: number; data: SkillFileContent; message: string }>;
-  createSkillFile: (skillId: string, path: string, content: string) => Promise<{ code: number; data: any; message: string }>;
+  createSkillFile: (skillId: string, path: string, content: string, isFolder?: boolean) => Promise<{ code: number; data: any; message: string }>;
   updateSkillFile: (skillId: string, path: string, newPath?: string, content?: string) => Promise<{ code: number; data: any; message: string }>;
   deleteSkillFile: (skillId: string, path: string) => Promise<{ code: number; message: string }>;
+  // 知识库 API
+  getKnowledgeBases: () => Promise<ApiResponse<KnowledgeBaseListResponse>>;
+  getKnowledgeBase: (kbId: string) => Promise<ApiResponse<KnowledgeBase>>;
+  createKnowledgeBase: (request: KnowledgeBaseCreateRequest) => Promise<ApiResponse<KnowledgeBase>>;
+  updateKnowledgeBase: (kbId: string, request: KnowledgeBaseUpdateRequest) => Promise<ApiResponse<KnowledgeBase>>;
+  deleteKnowledgeBase: (kbId: string) => Promise<ApiResponse<void>>;
+  getKnowledgeBaseFiles: (kbId: string) => Promise<ApiResponse<FileListListResponse>>;
+  uploadToKnowledgeBase: (kbId: string, file: File) => Promise<ApiResponse<FileInfo>>;
+  deleteKnowledgeBaseFile: (kbId: string, fileId: string) => Promise<ApiResponse<void>>;
+  deleteAllKnowledgeBaseFiles: (kbId: string) => Promise<ApiResponse<{ deletedCount: number }>>;
+  getFileChunks: (kbId: string, fileId: string) => Promise<ApiResponse<FileChunkListResponse>>;
+  // 召回测试历史记录 API
+  getRetrievalTestHistory: (kbId: string, page?: number, pageSize?: number) => Promise<ApiResponse<RetrievalTestHistoryListResponse>>;
+  addRetrievalTestHistory: (kbId: string, query: string) => Promise<ApiResponse<RetrievalTestHistory>>;
+  deleteRetrievalTestHistory: (historyId: string) => Promise<ApiResponse<void>>;
+  clearRetrievalTestHistory: (kbId: string) => Promise<ApiResponse<{ deletedCount: number }>>;
 }
 
 // 真实API服务
@@ -42,10 +82,12 @@ export const apiService: ApiService = {
     const response = await fetch(`${API_BASE_URL}/api/files`);
     return response.json();
   },
+
   getFile: async (fileId) => {
     const response = await fetch(`${API_BASE_URL}/api/files/${fileId}`);
     return response.json();
   },
+
   uploadFile: async (file) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -55,89 +97,20 @@ export const apiService: ApiService = {
     });
     return response.json();
   },
+
   deleteFile: async (fileId) => {
     const response = await fetch(`${API_BASE_URL}/api/files/${fileId}`, {
       method: 'DELETE',
     });
     return response.json();
   },
+
   deleteAllFiles: async () => {
     const response = await fetch(`${API_BASE_URL}/api/files/all`, {
-      method: 'DELETE',
-    });
+      method: 'DELETE' });
     return response.json();
   },
-  sendMessage: async (message) => {
-    const response = await fetch(`${API_BASE_URL}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
-    });
-    return response.json();
-  },
-  sendMessageStream: async (message, onChunk) => {
-    console.log('Starting stream request for message:', message);
-    const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
-    });
 
-    console.log('Response status:', response.status);
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Response error:', errorText);
-      throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error('Response body is null');
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let chunkCount = 0;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        console.log('Stream done, total chunks:', chunkCount);
-        break;
-      }
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || ''; // 保留不完整的行
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          if (data === '[DONE]') {
-            console.log('Received [DONE] signal');
-            return;
-          }
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.content) {
-              chunkCount++;
-              onChunk(parsed.content);
-            }
-            if (parsed.error) {
-              console.error('Server error:', parsed.error);
-              throw new Error(parsed.error);
-            }
-          } catch (e) {
-            if (e instanceof SyntaxError) {
-              console.error('Failed to parse SSE data:', data);
-            } else {
-              throw e;
-            }
-          }
-        }
-      }
-    }
-  },
   // 技能卡片 API 实现
   getSkillCards: async (searchKeyword = '') => {
     const url = searchKeyword
@@ -146,10 +119,12 @@ export const apiService: ApiService = {
     const response = await fetch(url);
     return response.json();
   },
+
   getSkillCard: async (cardId) => {
     const response = await fetch(`${API_BASE_URL}/api/skills/${cardId}`);
     return response.json();
   },
+
   createSkillCard: async (request) => {
     const response = await fetch(`${API_BASE_URL}/api/skills`, {
       method: 'POST',
@@ -158,6 +133,7 @@ export const apiService: ApiService = {
     });
     return response.json();
   },
+
   updateSkillCard: async (cardId, request) => {
     const response = await fetch(`${API_BASE_URL}/api/skills/${cardId}`, {
       method: 'PUT',
@@ -166,47 +142,55 @@ export const apiService: ApiService = {
     });
     return response.json();
   },
+
   deleteSkillCard: async (cardId) => {
     const response = await fetch(`${API_BASE_URL}/api/skills/${cardId}`, {
       method: 'DELETE',
     });
     return response.json();
   },
+
   deleteAllSkillCards: async () => {
     const response = await fetch(`${API_BASE_URL}/api/skills`, {
       method: 'DELETE',
     });
     return response.json();
   },
+
   publishSkillCard: async (cardId) => {
     const response = await fetch(`${API_BASE_URL}/api/skills/${cardId}/publish`, {
       method: 'PUT',
     });
     return response.json();
   },
+
   unpublishSkillCard: async (cardId) => {
     const response = await fetch(`${API_BASE_URL}/api/skills/${cardId}/unpublish`, {
       method: 'PUT',
     });
     return response.json();
   },
+
   // 技能文件 API 实现
   listSkillFiles: async (skillId) => {
     const response = await fetch(`${API_BASE_URL}/api/skills/${skillId}/files`);
     return response.json();
   },
+
   getSkillFileContent: async (skillId, path) => {
     const response = await fetch(`${API_BASE_URL}/api/skills/${skillId}/files/content?path=${encodeURIComponent(path)}`);
     return response.json();
   },
-  createSkillFile: async (skillId, path, content) => {
+
+  createSkillFile: async (skillId, path, content, isFolder = false) => {
     const response = await fetch(`${API_BASE_URL}/api/skills/${skillId}/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, content }),
+      body: JSON.stringify({ path, content, isFolder }),
     });
     return response.json();
   },
+
   updateSkillFile: async (skillId, path, newPath, content) => {
     const response = await fetch(`${API_BASE_URL}/api/skills/${skillId}/files`, {
       method: 'PUT',
@@ -215,8 +199,108 @@ export const apiService: ApiService = {
     });
     return response.json();
   },
+
   deleteSkillFile: async (skillId, path) => {
     const response = await fetch(`${API_BASE_URL}/api/skills/${skillId}/files?path=${encodeURIComponent(path)}`, {
+      method: 'DELETE',
+    });
+    return response.json();
+  },
+
+  // 知识库 API 实现
+  getKnowledgeBases: async () => {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases`);
+    return response.json();
+  },
+
+  getKnowledgeBase: async (kbId) => {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}`);
+    return response.json();
+  },
+
+  createKnowledgeBase: async (request) => {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    return response.json();
+  },
+
+  updateKnowledgeBase: async (kbId, request) => {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    return response.json();
+  },
+
+  deleteKnowledgeBase: async (kbId) => {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}`, {
+      method: 'DELETE',
+    });
+    return response.json();
+  },
+
+  getKnowledgeBaseFiles: async (kbId) => {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}/files`);
+    return response.json();
+  },
+
+  uploadToKnowledgeBase: async (kbId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}/files/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    return response.json();
+  },
+
+  deleteKnowledgeBaseFile: async (kbId, fileId) => {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}/files/${fileId}`, {
+      method: 'DELETE',
+    });
+    return response.json();
+  },
+
+  deleteAllKnowledgeBaseFiles: async (kbId) => {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}/files/all`, {
+      method: 'DELETE',
+    });
+    return response.json();
+  },
+
+  getFileChunks: async (kbId, fileId) => {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}/files/${fileId}/chunks`);
+    return response.json();
+  },
+
+  // 召回测试历史记录 API 实现
+  getRetrievalTestHistory: async (kbId, page = 1, pageSize = 10) => {
+    const response = await fetch(`${API_BASE_URL}/api/retrieval-test-history/${kbId}?page=${page}&pageSize=${pageSize}`);
+    return response.json();
+  },
+
+  addRetrievalTestHistory: async (kbId, query) => {
+    const response = await fetch(`${API_BASE_URL}/api/retrieval-test-history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kbId, query }),
+    });
+    return response.json();
+  },
+
+  deleteRetrievalTestHistory: async (historyId) => {
+    const response = await fetch(`${API_BASE_URL}/api/retrieval-test-history/${historyId}`, {
+      method: 'DELETE',
+    });
+    return response.json();
+  },
+
+  clearRetrievalTestHistory: async (kbId) => {
+    const response = await fetch(`${API_BASE_URL}/api/retrieval-test-history/${kbId}/all`, {
       method: 'DELETE',
     });
     return response.json();

@@ -90,7 +90,7 @@ def get_skills():
     return jsonify({
         'code': 0,
         'data': skill_cards,
-        'message': 'Success'
+        'message': '操作成功'
     })
 
 
@@ -103,13 +103,13 @@ def get_skill(card_id):
         return jsonify({
             'code': 0,
             'data': skill_card.to_dict(),
-            'message': 'Success'
+            'message': '操作成功'
         })
     else:
         return jsonify({
             'code': 404,
-            'error': 'Skill card not found',
-            'message': 'Skill card not found'
+            'error': '技能卡片不存在',
+            'message': '技能卡片不存在'
         }), 404
 
 
@@ -130,8 +130,8 @@ def create_skill():
     if not data:
         return jsonify({
             'code': 400,
-            'error': 'Request body is required',
-            'message': 'Request body is required'
+            'error': '请求体不能为空',
+            'message': '请求体不能为空'
         }), 400
 
     title = data.get('title', '').strip()
@@ -142,37 +142,37 @@ def create_skill():
     if not title:
         return jsonify({
             'code': 400,
-            'error': 'Title is required',
-            'message': 'Title is required'
+            'error': '标题不能为空',
+            'message': '标题不能为空'
         }), 400
 
     if not description:
         return jsonify({
             'code': 400,
-            'error': 'Description is required',
-            'message': 'Description is required'
+            'error': '描述不能为空',
+            'message': '描述不能为空'
         }), 400
 
     if not skill_code:
         return jsonify({
             'code': 400,
-            'error': 'Skill Code is required',
-            'message': 'Skill Code is required'
+            'error': '技能代码不能为空',
+            'message': '技能代码不能为空'
         }), 400
 
     if not validate_skill_code(skill_code):
         return jsonify({
             'code': 400,
-            'error': 'Skill Code can only contain letters, numbers, underscores, and hyphens',
-            'message': 'Skill Code can only contain letters, numbers, underscores, and hyphens'
+            'error': '技能代码只能包含字母、数字、下划线和连字符',
+            'message': '技能代码只能包含字母、数字、下划线和连字符'
         }), 400
 
     # Check if skill code already exists
     if skill_card_db.is_skill_code_exists(skill_code):
         return jsonify({
             'code': 400,
-            'error': 'Skill Code already exists',
-            'message': 'Skill Code already exists'
+            'error': '技能代码已存在',
+            'message': '技能代码已存在'
         }), 400
 
     # Create skill card
@@ -202,14 +202,14 @@ def create_skill():
         skill_card_db.delete_skill_card(card_id)
         return jsonify({
             'code': 500,
-            'error': f'Failed to create skill folder: {str(e)}',
-            'message': f'Failed to create skill folder: {str(e)}'
+            'error': f'创建技能文件夹失败: {str(e)}',
+            'message': f'创建技能文件夹失败: {str(e)}'
         }), 500
 
     return jsonify({
         'code': 0,
         'data': skill_card.to_dict(),
-        'message': 'Skill card created successfully'
+        'message': '技能卡片创建成功'
     }), 201
 
 
@@ -228,8 +228,8 @@ def update_skill(card_id):
     if not data:
         return jsonify({
             'code': 400,
-            'error': 'Request body is required',
-            'message': 'Request body is required'
+            'error': '请求体不能为空',
+            'message': '请求体不能为空'
         }), 400
 
     # Check if skill card exists
@@ -237,16 +237,16 @@ def update_skill(card_id):
     if not existing_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill card not found',
-            'message': 'Skill card not found'
+            'error': '技能卡片不存在',
+            'message': '技能卡片不存在'
         }), 404
 
     # Check if skill is published - cannot modify published skill info
     if existing_card.published:
         return jsonify({
             'code': 403,
-            'error': 'Cannot modify published skill',
-            'message': 'Published skills cannot be modified. Please unpublish first.'
+            'error': '无法修改已发布的技能',
+            'message': '已发布的技能无法修改，请先取消发布'
         }), 403
 
     # Update skill card (only title and description can be modified)
@@ -265,7 +265,7 @@ def update_skill(card_id):
     return jsonify({
         'code': 0,
         'data': updated_card.to_dict(),
-        'message': 'Skill card updated successfully'
+        'message': '技能卡片更新成功'
     })
 
 
@@ -277,16 +277,16 @@ def delete_skill(card_id):
     if not existing_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill card not found',
-            'message': 'Skill card not found'
+            'error': '技能卡片不存在',
+            'message': '技能卡片不存在'
         }), 404
 
     # Check if skill is published
     if existing_card.published:
         return jsonify({
             'code': 400,
-            'error': 'Cannot delete published skill',
-            'message': 'Cannot delete published skill. Please unpublish first.'
+            'error': '无法删除已发布的技能',
+            'message': '无法删除已发布的技能，请先取消发布'
         }), 400
 
     # Get skill code before deleting from database
@@ -308,7 +308,7 @@ def delete_skill(card_id):
 
     return jsonify({
         'code': 0,
-        'message': 'Skill card deleted successfully'
+        'message': '技能卡片删除成功'
     })
 
 
@@ -319,7 +319,7 @@ def delete_all_skills():
 
     return jsonify({
         'code': 0,
-        'message': 'All skill cards deleted successfully'
+        'message': '所有技能卡片删除成功'
     })
 
 
@@ -331,9 +331,39 @@ def publish_skill(card_id):
     if not existing_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill card not found',
-            'message': 'Skill card not found'
+            'error': '技能卡片不存在',
+            'message': '技能卡片不存在'
         }), 404
+
+    # Validate SKILL.md file exists and is not empty (case-insensitive)
+    skill_folder = SKILLS_PATH / existing_card.skill_code
+    skill_md_found = False
+    skill_md_path = None
+
+    # Check for SKILL.md file (case-insensitive)
+    if skill_folder.exists():
+        for file in skill_folder.iterdir():
+            if file.is_file() and file.name.upper() == 'SKILL.MD':
+                skill_md_found = True
+                skill_md_path = file
+                break
+
+    if not skill_md_found:
+        return jsonify({
+            'code': 400,
+            'error': '缺少 SKILL.md 文件',
+            'message': '技能根目录下必须存在 SKILL.md 文件才能发布，请先创建该文件'
+        }), 400
+
+    # Check if SKILL.md is empty
+    if skill_md_path:
+        content = skill_md_path.read_text(encoding='utf-8')
+        if not content.strip():
+            return jsonify({
+                'code': 400,
+                'error': 'SKILL.md 文件内容不能为空',
+                'message': 'SKILL.md 文件内容不能为空，请添加技能描述内容'
+            }), 400
 
     # Create zip package before publishing
     try:
@@ -342,8 +372,8 @@ def publish_skill(card_id):
     except Exception as e:
         return jsonify({
             'code': 500,
-            'error': f'Failed to create skill package: {str(e)}',
-            'message': f'Failed to create skill package: {str(e)}'
+            'error': f'创建技能包失败: {str(e)}',
+            'message': f'创建技能包失败: {str(e)}'
         }), 500
 
     skill_card_db.update_skill_card(card_id, published=True)
@@ -354,7 +384,7 @@ def publish_skill(card_id):
     return jsonify({
         'code': 0,
         'data': updated_card.to_dict(),
-        'message': 'Skill card published successfully'
+        'message': '技能发布成功'
     })
 
 
@@ -366,8 +396,8 @@ def unpublish_skill(card_id):
     if not existing_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill card not found',
-            'message': 'Skill card not found'
+            'error': '技能卡片不存在',
+            'message': '技能卡片不存在'
         }), 404
 
     skill_card_db.update_skill_card(card_id, published=False)
@@ -388,5 +418,5 @@ def unpublish_skill(card_id):
     return jsonify({
         'code': 0,
         'data': updated_card.to_dict(),
-        'message': 'Skill card unpublished successfully'
+        'message': '技能取消发布成功'
     })

@@ -1,113 +1,157 @@
+/* ============================================
+   NEON-VOID THEME - SKILL LIST PAGE
+   ============================================ */
+
+/* Import unique fonts */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+
+/* CSS Variables */
+:root {
+  /* Core colors */
+  --void-0: #000000;
+  --void-1: #030303;
+  --void-2: #0a0a0a;
+  --void-3: #111111;
+  --void-4: #1a1a1a;
+
+  /* Accent colors */
+  --magenta-primary: #8b5cf6;
+  --magenta-secondary: #7c3aed;
+  --magenta-glow: rgba(139, 92, 246, 0.6);
+
+  --cyan-primary: #8b5cf6;
+  --cyan-glow: rgba(139, 92, 246, 0.5);
+
+  --violet-primary: #8b5cf6;
+  --violet-glow: rgba(139, 92, 246, 0.5);
+
+  /* Text colors */
+  --text-primary: #f0f0f0;
+  --text-secondary: #a0a0a0;
+  --text-muted: #606060;
+
+  /* Typography */
+  --font-display: 'Orbitron', sans-serif;
+  --font-body: 'Rajdhani', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Easing */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ============================================
+   BASE LAYOUT & BACKGROUND
+   ============================================ */
+
 .skill-list-page {
+  position: relative;
   width: 100%;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #242424;
-}
-
-.skill-header {
-  background: #1a1a1a;
-  border-bottom: 1px solid #333;
-  padding: 16px 24px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-shrink: 0;
-}
-
-.back-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border: 1px solid #333;
-  background: transparent;
-  color: #e0e0e0;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.back-button:hover {
-  background: #2a2a2a;
-  border-color: #4f46e5;
-}
-
-.back-button:active {
-  background: #333;
-}
-
-.back-button svg {
-  color: #9ca3af;
-}
-
-.skill-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #e0e0e0;
-  margin: 0;
-  flex: 1;
-}
-
-.add-skill-button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border: none;
-  background: #4f46e5;
-  color: white;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.add-skill-button:hover {
-  background: #4338ca;
-}
-
-.add-skill-button:active {
-  background: #3730a3;
-}
-
-.skill-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 24px;
+  background: var(--void-0);
+  font-family: var(--font-body);
   overflow: hidden;
 }
 
-/* 搜索栏 */
+/* ============================================
+   BACKGROUND STYLES (Cyber Grid - same as HomePage)
+   ============================================ */
+
+.bg-preview-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: #000000;
+  background-image:
+    linear-gradient(rgba(139, 92, 246, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.05) 1px, transparent 1px);
+  background-size: 50px 50px;
+  animation: gridScroll 20s linear infinite;
+}
+
+@keyframes gridScroll {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(50px, 50px); }
+}
+
+.bg-preview-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% -20%, rgba(139, 92, 246, 0.15), transparent),
+    radial-gradient(ellipse 50% 30% at 80% 100%, rgba(139, 92, 246, 0.1), transparent);
+}
+
+/* ============================================
+   CONTENT CONTAINER
+   ============================================ */
+
+.skill-content {
+  position: relative;
+  z-index: 10;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 32px;
+  overflow: hidden;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ============================================
+   SEARCH BAR
+   ============================================ */
+
 .search-bar {
-  margin-bottom: 24px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 32px;
+  animation: searchBarEnter 0.6s var(--ease-out-expo) forwards;
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+@keyframes searchBarEnter {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .search-input-wrapper {
   position: relative;
   display: flex;
   align-items: center;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 12px;
-  padding: 12px 16px;
-  transition: all 0.2s ease;
+  flex: 1;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 14px 20px;
+  transition: all 0.4s var(--ease-out-expo);
+  backdrop-filter: blur(10px);
 }
 
 .search-input-wrapper:focus-within {
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  border-color: var(--magenta-primary);
+  box-shadow: 0 0 20px var(--magenta-glow);
 }
 
 .search-icon {
-  color: #6b7280;
+  color: var(--text-muted);
   flex-shrink: 0;
-  margin-right: 12px;
+  margin-right: 14px;
+  transition: color 0.3s ease;
+}
+
+.search-input-wrapper:focus-within .search-icon {
+  color: var(--magenta-primary);
 }
 
 .search-input {
@@ -115,12 +159,14 @@
   background: transparent;
   border: none;
   outline: none;
-  color: #e0e0e0;
+  color: var(--text-primary);
   font-size: 14px;
+  font-family: var(--font-body);
+  letter-spacing: 0.5px;
 }
 
 .search-input::placeholder {
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .clear-button {
@@ -129,16 +175,66 @@
   justify-content: center;
   background: transparent;
   border: none;
-  color: #6b7280;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  padding: 6px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
 }
 
 .clear-button:hover {
-  background: #2a2a2a;
-  color: #9ca3af;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--magenta-primary);
+}
+
+.add-skill-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  border: 1px solid var(--magenta-primary);
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--magenta-primary);
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.4s var(--ease-out-expo);
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+
+.add-skill-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--magenta-primary);
+  opacity: 0;
+  transition: opacity 0.4s var(--ease-out-expo);
+}
+
+.add-skill-button:hover {
+  color: var(--void-0);
+  box-shadow: 0 0 30px var(--magenta-glow);
+}
+
+.add-skill-button:hover::before {
+  opacity: 1;
+}
+
+.add-skill-button svg {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.add-skill-button span {
+  position: relative;
+  z-index: 1;
 }
 
 /* 技能卡片容器 */
@@ -146,52 +242,163 @@
   flex: 1;
   overflow-y: auto;
   margin-bottom: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--magenta-primary) transparent;
+}
+
+.skill-cards-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.skill-cards-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.skill-cards-container::-webkit-scrollbar-thumb {
+  background: var(--magenta-secondary);
+  border-radius: 3px;
 }
 
 /* 技能卡片网格 */
 .skill-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
 }
 
 /* 技能卡片 */
 .skill-card {
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 12px;
-  padding: 16px;
-  transition: all 0.2s ease;
+  position: relative;
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  padding: 24px;
   cursor: pointer;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  transition: all 0.4s var(--ease-out-expo);
+  animation: cardEnter 0.6s var(--ease-out-expo) forwards;
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+.skill-card:nth-child(1) { animation-delay: 0.05s; }
+.skill-card:nth-child(2) { animation-delay: 0.1s; }
+.skill-card:nth-child(3) { animation-delay: 0.15s; }
+.skill-card:nth-child(4) { animation-delay: 0.2s; }
+.skill-card:nth-child(5) { animation-delay: 0.25s; }
+.skill-card:nth-child(n+6) { animation-delay: 0.3s; }
+
+@keyframes cardEnter {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Card gradient background */
+.skill-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.12), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.6s var(--ease-out-expo);
+  pointer-events: none;
+}
+
+.skill-card:hover::before {
+  opacity: 1;
+}
+
+/* Card border effect */
+.skill-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent, rgba(255,255,255,0.1));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.5;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.skill-card:hover::after {
+  opacity: 1;
+}
+
+/* Card glow on hover */
+.skill-card {
+  position: relative;
 }
 
 .skill-card:hover {
-  border-color: #4f46e5;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-color: rgba(139, 92, 246, 0.3);
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.1),
+    0 8px 32px rgba(139, 92, 246, 0.15),
+    0 0 60px rgba(139, 92, 246, 0.1);
+  transform: translateY(-4px);
 }
+
+/* Hover line effect */
+.skill-card .card-hover-line {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) scaleX(0);
+  width: 60%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--magenta-primary), transparent);
+  transition: transform 0.5s var(--ease-out-expo);
+  pointer-events: none;
+}
+
+.skill-card:hover .card-hover-line {
+  transform: translateX(-50%) scaleX(1);
+}
+
+/* ============================================
+   CARD HEADER & ACTIONS
+   ============================================ */
 
 .skill-card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
 }
 
 .skill-card-title {
-  font-size: 16px;
+  font-family: var(--font-display);
+  font-size: 18px;
   font-weight: 600;
-  color: #e0e0e0;
+  letter-spacing: 1px;
+  color: var(--text-primary);
   margin: 0;
   flex: 1;
   word-break: break-word;
+  text-shadow: 0 0 20px var(--magenta-glow);
+  transition: color 0.3s ease;
+}
+
+.skill-card:hover .skill-card-title {
+  color: var(--magenta-primary);
 }
 
 .skill-card-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
-  margin-left: 8px;
+  margin-left: 12px;
 }
 
 /* 发布按钮 */
@@ -199,32 +406,39 @@
 .unpublish-button {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
   border: none;
 }
 
 .publish-button {
-  background: rgba(34, 197, 94, 0.15);
+  background: rgba(34, 197, 94, 0.12);
   color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 .publish-button:hover {
-  background: rgba(34, 197, 94, 0.25);
+  background: rgba(34, 197, 94, 0.2);
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.3);
 }
 
 .unpublish-button {
-  background: rgba(34, 197, 94, 0.2);
+  background: rgba(34, 197, 94, 0.15);
   color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.4);
 }
 
 .unpublish-button:hover {
   background: rgba(34, 197, 94, 0.1);
+  box-shadow: 0 0 15px rgba(34, 197, 94, 0.2);
 }
 
 /* 编辑按钮 */
@@ -234,16 +448,17 @@
   justify-content: center;
   background: transparent;
   border: none;
-  color: #6b7280;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  padding: 8px;
+  border-radius: 10px;
+  transition: all 0.3s ease;
 }
 
 .edit-button:hover {
-  background: #2a2a2a;
-  color: #4f46e5;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--cyan-primary);
+  box-shadow: 0 0 15px var(--cyan-glow);
 }
 
 /* 删除按钮 */
@@ -253,65 +468,120 @@
   justify-content: center;
   background: transparent;
   border: none;
-  color: #6b7280;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  padding: 8px;
+  border-radius: 10px;
+  transition: all 0.3s ease;
 }
 
 .delete-button:hover:not(.disabled) {
-  background: #371818;
+  background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
 }
 
 .delete-button.disabled {
-  opacity: 0.4;
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
 .skill-card-description {
-  font-size: 13px;
-  color: #9ca3af;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
   line-height: 1.6;
-  margin: 0 0 12px 0;
-  word-break: break-word;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+  z-index: 1;
+  min-height: 44.8px;
+  max-height: 44.8px;
+}
+
+/* Tooltip style for hover */
+.skill-card-description[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  background: rgba(10, 10, 10, 0.95);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-body);
+  line-height: 1.6;
+  white-space: normal;
+  min-width: 200px;
+  max-width: 300px;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.5),
+    0 0 20px rgba(139, 92, 246, 0.2);
+  z-index: 100;
+  pointer-events: none;
+  animation: tooltipFadeIn 0.2s ease;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-8px);
+  }
 }
 
 .skill-card-code {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
-  background: #242424;
-  border-radius: 8px;
-  margin-top: 8px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  margin-top: 12px;
 }
 
 .skill-card-code code {
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: #4f46e5;
-  font-family: 'Consolas', 'Monaco', monospace;
+  color: var(--violet-primary);
   word-break: break-all;
+  text-shadow: 0 0 10px var(--violet-glow);
 }
 
-/* 加载状态 */
+/* ============================================
+   LOADING STATE
+   ============================================ */
+
 .loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
-  color: #9ca3af;
+  padding: 80px 20px;
+  color: var(--text-muted);
 }
 
 .loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #333;
-  border-top-color: #4f46e5;
+  width: 50px;
+  height: 50px;
+  border: 3px solid rgba(255, 255, 255, 0.06);
+  border-top-color: var(--magenta-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 0 20px var(--magenta-glow);
 }
 
 @keyframes spin {
@@ -323,112 +593,175 @@
 .loading-state p {
   margin: 0;
   font-size: 14px;
+  font-family: var(--font-body);
+  letter-spacing: 1px;
+  color: var(--text-secondary);
 }
 
-/* 错误状态 */
+/* ============================================
+   ERROR STATE
+   ============================================ */
+
 .error-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
+  padding: 80px 20px;
   color: #ef4444;
 }
 
 .error-state p {
-  margin: 0 0 16px 0;
-  font-size: 14px;
+  margin: 0 0 20px 0;
+  font-size: 15px;
+  font-family: var(--font-body);
+  color: var(--text-secondary);
 }
 
 .retry-button {
-  padding: 8px 16px;
-  background: #4f46e5;
-  border: none;
-  border-radius: 8px;
-  color: white;
+  padding: 12px 24px;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid var(--magenta-primary);
+  border-radius: 16px;
+  color: var(--magenta-primary);
   font-size: 14px;
-  font-weight: 500;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
 }
 
 .retry-button:hover {
-  background: #4338ca;
+  background: var(--magenta-primary);
+  color: var(--void-0);
+  box-shadow: 0 0 25px var(--magenta-glow);
 }
 
-/* 空状态 */
+/* ============================================
+   EMPTY STATE
+   ============================================ */
+
 .empty-state {
   text-align: center;
-  max-width: 400px;
-  margin: 60px auto;
+  max-width: 450px;
+  margin: 80px auto;
 }
 
 .empty-icon {
-  color: #4f46e5;
-  margin-bottom: 24px;
+  color: var(--magenta-primary);
+  margin-bottom: 32px;
   display: flex;
   justify-content: center;
+  animation: float 3s ease-in-out infinite;
+  filter: drop-shadow(0 0 20px var(--magenta-glow));
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
 }
 
 .empty-title {
-  font-size: 20px;
+  font-family: var(--font-display);
+  font-size: 22px;
   font-weight: 600;
-  color: #e0e0e0;
+  letter-spacing: 1px;
+  color: var(--text-primary);
   margin-bottom: 12px;
+  text-shadow: 0 0 20px var(--magenta-glow);
 }
 
 .empty-description {
-  font-size: 14px;
-  color: #9ca3af;
-  line-height: 1.6;
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  letter-spacing: 0.5px;
 }
 
-/* 统计信息 */
+/* ============================================
+   STATS
+   ============================================ */
+
 .skill-stats {
   text-align: center;
-  color: #6b7280;
-  font-size: 13px;
-  padding: 8px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 12px;
+  text-transform: uppercase;
 }
 
-/* 模态框 */
+/* ============================================
+   MODAL
+   ============================================ */
+
 .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  animation: modalFadeIn 0.3s ease;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .modal-content {
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 16px;
+  background: rgba(10, 10, 10, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
   width: 90%;
-  max-width: 500px;
+  max-width: 520px;
   max-height: 90vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+    0 0 100px rgba(139, 92, 246, 0.1);
+  animation: modalSlideIn 0.4s var(--ease-out-expo);
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid #333;
+  padding: 24px 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .modal-header h2 {
-  font-size: 18px;
+  font-family: var(--font-display);
+  font-size: 20px;
   font-weight: 600;
-  color: #e0e0e0;
+  letter-spacing: 1px;
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -438,34 +771,49 @@
   justify-content: center;
   background: transparent;
   border: none;
-  color: #6b7280;
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  transition: all 0.2s ease;
+  padding: 8px;
+  border-radius: 10px;
+  transition: all 0.3s ease;
 }
 
 .modal-close-button:hover {
-  background: #2a2a2a;
-  color: #9ca3af;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--magenta-primary);
 }
 
 .modal-body {
-  padding: 24px;
+  padding: 28px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--magenta-secondary) transparent;
+}
+
+.modal-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: var(--magenta-secondary);
+  border-radius: 2px;
 }
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid #333;
+  padding: 20px 28px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
 }
 
-/* 表单样式 */
+/* ============================================
+   FORM STYLES
+   ============================================ */
+
 .form-group {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .form-group:last-child {
@@ -474,110 +822,128 @@
 
 .form-group label {
   display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: #e0e0e0;
-  margin-bottom: 8px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  text-transform: uppercase;
 }
 
 .form-hint {
   display: block;
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
+  letter-spacing: 0.3px;
 }
 
 .form-input,
 .form-textarea {
   width: 100%;
-  padding: 10px 12px;
-  background: #242424;
-  border: 1px solid #333;
-  border-radius: 8px;
-  color: #e0e0e0;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: var(--text-primary);
   font-size: 14px;
-  font-family: inherit;
-  transition: all 0.2s ease;
+  font-family: var(--font-body);
+  letter-spacing: 0.3px;
+  transition: all 0.3s ease;
   box-sizing: border-box;
 }
 
 .form-input:focus,
 .form-textarea:focus {
   outline: none;
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  border-color: var(--magenta-primary);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 20px var(--magenta-glow);
 }
 
 .form-input::placeholder,
 .form-textarea::placeholder {
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
-.form-textarea {
-  resize: vertical;
-  min-height: 80px;
-}
-
-.modal-button {
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: none;
-}
-
-.modal-button:disabled {
+.form-input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
+.form-textarea {
+  resize: vertical;
+  min-height: 100px;
+  line-height: 1.6;
+}
+
+/* ============================================
+   MODAL BUTTONS
+   ============================================ */
+
+.modal-button {
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: none;
+}
+
+.modal-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .modal-button-secondary {
-  background: #2a2a2a;
-  color: #e0e0e0;
-  border: 1px solid #333;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .modal-button-secondary:hover:not(:disabled) {
-  background: #333;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .modal-button-primary {
-  background: #4f46e5;
-  color: white;
+  background: var(--magenta-primary);
+  color: var(--void-0);
 }
 
 .modal-button-primary:hover:not(:disabled) {
-  background: #4338ca;
+  background: var(--magenta-secondary);
+  box-shadow: 0 0 25px var(--magenta-glow);
 }
 
-/* 响应式 */
-@media (max-width: 640px) {
-  .skill-header {
-    padding: 12px 16px;
-    flex-wrap: wrap;
-  }
+/* ============================================
+   RESPONSIVE
+   ============================================ */
 
-  .skill-title {
-    font-size: 16px;
-  }
-
-  .add-skill-button {
-    font-size: 13px;
-    padding: 8px 12px;
-  }
-
+@media (max-width: 768px) {
   .skill-content {
-    padding: 16px;
+    padding: 20px;
   }
 
   .skill-cards-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
 
-  .skill-card-actions {
-    flex-wrap: wrap;
+  .search-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .add-skill-button {
+    justify-content: center;
   }
 
   .empty-title {
@@ -590,12 +956,59 @@
 
   .modal-content {
     width: 95%;
+    max-height: 85vh;
   }
 
   .modal-header,
   .modal-body,
   .modal-footer {
-    padding-left: 16px;
-    padding-right: 16px;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .modal-header {
+    padding-top: 20px;
+    padding-bottom: 20px;
+  }
+
+  .modal-body {
+    padding-top: 20px;
+    padding-bottom: 20px;
+  }
+
+  .modal-footer {
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+
+  .skill-card {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .skill-content {
+    padding: 16px;
+  }
+
+  .search-input-wrapper {
+    padding: 12px 16px;
+  }
+
+  .add-skill-button {
+    padding: 12px 20px;
+    font-size: 13px;
+  }
+
+  .skill-card-title {
+    font-size: 16px;
+  }
+
+  .skill-card-description {
+    font-size: 13px;
+  }
+
+  .modal-header h2 {
+    font-size: 18px;
   }
 }

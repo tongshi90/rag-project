@@ -2,7 +2,7 @@
 完整文档处理流程模块
 
 整合文档处理的步骤：
-1. 文档拆分 (Splitter) - PDF → Chunks
+1. 文档拆分 (Splitter) - PDF/Word → Chunks
 2. 异常检测 (Validator) - Chunk 质量检测
 3. Chunk 优化 (Optimizer) - LLM 辅助合并/拆分
 4. 实体抽取 (Entity Extraction) - 抽取文档实体
@@ -14,7 +14,11 @@
 使用方式：
     from app.services.document_processing import process_document
 
-    result = process_document(pdf_path, file_id)
+    result = process_document(file_path, file_id)
+
+支持格式：
+- PDF (.pdf)
+- Word (.docx)
 """
 
 import time
@@ -24,7 +28,7 @@ from typing import Dict, Any
 from .embedding import embed_and_store_chunks, get_vector_store
 from .optimizer.chunk_optimizer import optimize_chunks
 # 导入各个步骤的模块
-from .splitter.text_splitter import split_pdf_to_chunks
+from .splitter import split_pdf_to_chunks, split_word_to_chunks, is_word_file
 from .validator.validate import validate_chunks, get_validation_summary
 # 新增模块
 from .entity_extraction import EntityExtractor
@@ -34,8 +38,9 @@ from .keyword_index import KeywordIndexer
 
 
 def process_document(
-    pdf_path: str,
+    file_path: str,
     doc_id: str,
+    kb_id: str = None,
     show_progress: bool = True,
     embedding_batch_size: int = 10
 ) -> Dict[str, Any]:
@@ -48,8 +53,9 @@ def process_document(
         7. 关键字索引 → 8. 向量化存储
 
     Args:
-        pdf_path: PDF 文件路径
+        file_path: 文件路径（支持 PDF 和 Word）
         doc_id: 文档 ID
+        kb_id: 知识库 ID（可选），用于标记向量数据
         show_progress: 是否显示处理进度
         embedding_batch_size: 向量化批处理大小
 
@@ -57,6 +63,7 @@ def process_document(
         处理结果，包含：
             - success: 是否成功
             - doc_id: 文档 ID
+            - file_type: 文件类型（pdf/word）
             - steps: 各步骤的执行结果
                 - split: 拆分结果
                 - validate: 验证结果
@@ -74,10 +81,16 @@ def process_document(
     """
     start_time = time.time()
 
+    # 判断文件类型
+    file_type = "word" if is_word_file(file_path) else "pdf"
+
     if show_progress:
         print(f"\n{'#'*60}")
-        print(f"# 开始处理文档: {Path(pdf_path).name}")
+        print(f"# 开始处理文档: {Path(file_path).name}")
+        print(f"# 文档类型: {file_type.upper()}")
         print(f"# 文档 ID: {doc_id}")
+        if kb_id:
+            print(f"# 知识库 ID: {kb_id}")
         print(f"{'#'*60}\n")
 
     result = {
@@ -96,15 +109,20 @@ def process_document(
         # TODO: 需要集成 form_splitter.py 和 img_splitter.py 的处理结果
         if show_progress:
             print(f"\n{'='*60}")
-            print(f"第一步: 文档拆分")
+            print(f"第一步: 文档拆分 ({file_type.upper()})")
             print(f"{'='*60}")
 
         step_start = time.time()
-        chunks, title_patterns = split_pdf_to_chunks(pdf_path, doc_id)
+        # 根据文件类型选择解析器，传递 kb_id
+        if file_type == "word":
+            chunks, title_patterns = split_word_to_chunks(file_path, doc_id, kb_id)
+        else:
+            chunks, title_patterns = split_pdf_to_chunks(file_path, doc_id, kb_id)
         step_elapsed = time.time() - step_start
 
         result['steps']['split'] = {
             "success": True,
+            "file_type": file_type,
             "chunk_count": len(chunks),
             "title_pattern_count": len(title_patterns) if title_patterns else 0,
             "elapsed": step_elapsed
@@ -459,17 +477,19 @@ def get_document_stats(doc_id: str) -> Dict[str, Any]:
 
 
 # 向后兼容：保持原有的 parse_pdf 函数名
-def parse_pdf(pdf_path: str, doc_id: str) -> Dict[str, Any]:
+def parse_pdf(file_path: str, doc_id: str, kb_id: str = None) -> Dict[str, Any]:
     """
     向后兼容的 parse_pdf 函数
 
     内部调用完整的 process_document 流程
+    注意：函数名虽然叫 parse_pdf，但实际支持 PDF 和 Word 文档
 
     Args:
-        pdf_path: PDF 文件路径
+        file_path: 文件路径（支持 PDF 和 Word）
         doc_id: 文档 ID
+        kb_id: 知识库 ID（可选）
 
     Returns:
         处理结果字典
     """
-    return process_document(pdf_path, doc_id, show_progress=True)
+    return process_document(file_path, doc_id, kb_id=kb_id, show_progress=True)

@@ -6,14 +6,35 @@ export interface FileInfo {
   type: string;
   uploadTime: string;
   status: 'parsing' | 'completed' | 'failed';
+  kbId?: string | null;
 }
 
-// 消息类型
-export interface Message {
+// 知识库类型
+export interface KnowledgeBase {
   id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: string;
+  name: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+  fileCount?: number;
+}
+
+// 知识库创建请求
+export interface KnowledgeBaseCreateRequest {
+  name: string;
+  description?: string;
+}
+
+// 知识库更新请求
+export interface KnowledgeBaseUpdateRequest {
+  name?: string;
+  description?: string;
+}
+
+// 知识库列表响应
+export interface KnowledgeBaseListResponse {
+  knowledgeBases: KnowledgeBase[];
+  total: number;
 }
 
 // 上传文件状态
@@ -32,25 +53,10 @@ export interface ApiResponse<T> {
 }
 
 // 文件列表响应
-export interface FileListResponse {
+export interface FileListListResponse {
   files: FileInfo[];
   total: number;
 }
-
-// 聊天请求
-export interface ChatRequest {
-  message: string;
-  files?: string[];
-}
-
-// 聊天响应
-export interface ChatResponse {
-  answer: string;
-  elapsed?: number;
-}
-
-// 流式聊天回调函数
-export type StreamMessageCallback = (chunk: string) => void;
 
 // 技能卡片类型
 export interface SkillCard {
@@ -88,9 +94,14 @@ export interface SkillCardListResponse {
 // 技能文件类型
 export interface SkillFile {
   name: string;
+  path: string;
   isFile: boolean;
   size: number;
   modifiedTime: number;
+  children?: SkillFile[];
+  hasChildren?: boolean;
+  isSystemFile?: boolean;  // 系统文件标识（如 SKILL.md）
+  originalPath?: string;   // 原始路径（用于文件夹路径追踪）
 }
 
 // 技能文件内容类型
@@ -99,4 +110,71 @@ export interface SkillFileContent {
   path: string;
   content: string;
   size: number;
+}
+
+// 召回测试请求
+export interface RetrievalTestRequest {
+  query: string;
+  kbId?: string;
+  topK?: number;
+  retrievalTopK?: number;
+}
+
+// 召回chunk类型
+export interface RetrievableChunk {
+  chunkId: string;
+  text: string;
+  score: number;
+  rerankScore: number;
+  metadata: {
+    docId: string;
+    page: number;
+    order: number;
+    type: string;
+    length: number;
+    bbox?: string;
+  };
+}
+
+// 召回测试响应
+export interface RetrievalTestResponse {
+  query: string;
+  chunks: RetrievableChunk[];
+  total: number;
+  message?: string;
+}
+
+// 召回测试历史记录类型
+export interface RetrievalTestHistory {
+  id: string;
+  kbId: string;
+  query: string;
+  timestamp: string;
+}
+
+// 召回测试历史记录列表响应
+export interface RetrievalTestHistoryListResponse {
+  histories: RetrievalTestHistory[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+// Chunk 类型
+export interface FileChunk {
+  chunkId: string;
+  text: string;
+  order: number;
+  page: number;
+  type: string;
+  length: number;
+}
+
+// Chunk 列表响应
+export interface FileChunkListResponse {
+  fileId: string;
+  fileName: string;
+  chunks: FileChunk[];
+  total: number;
 }

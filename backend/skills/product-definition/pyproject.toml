@@ -1,0 +1,8 @@
+[project]
+name = "product-definition"
+version = "1.0.0"
+description = "Product Definition Skill - Requirement analysis, product design, and PRD writing assistant"
+requires-python = ">=3.10"
+dependencies = [
+    # OpenClaw 内置依赖，无需额外指定
+]

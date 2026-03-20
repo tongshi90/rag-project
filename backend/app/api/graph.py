@@ -39,7 +39,7 @@ def get_graph_stats(doc_id: str):
         if not graph_builder.load_graph(doc_id):
             return jsonify({
                 'success': False,
-                'error': f'Graph not found for document: {doc_id}'
+                'error': f'未找到文档的知识图谱: {doc_id}'
             }), 404
 
         # 获取统计信息
@@ -95,7 +95,7 @@ def get_document_entities(doc_id: str):
         if not graph_builder.load_graph(doc_id):
             return jsonify({
                 'success': False,
-                'error': f'Graph not found for document: {doc_id}'
+                'error': f'未找到文档的知识图谱: {doc_id}'
             }), 404
 
         entity_type = request.args.get('type')
@@ -161,7 +161,7 @@ def get_entity_neighbors():
     data = request.get_json()
 
     if not data:
-        return jsonify({'success': False, 'error': 'No data provided'}), 400
+        return jsonify({'success': False, 'error': '未提供数据'}), 400
 
     doc_id = data.get('doc_id')
     entity_id = data.get('entity_id')
@@ -169,7 +169,7 @@ def get_entity_neighbors():
     max_neighbors = data.get('max_neighbors', 50)
 
     if not doc_id or not entity_id:
-        return jsonify({'success': False, 'error': 'doc_id and entity_id are required'}), 400
+        return jsonify({'success': False, 'error': 'doc_id 和 entity_id 参数是必需的'}), 400
 
     try:
         graph_retriever = get_graph_retriever()
@@ -220,14 +220,14 @@ def search_graph_entities():
     data = request.get_json()
 
     if not data:
-        return jsonify({'success': False, 'error': 'No data provided'}), 400
+        return jsonify({'success': False, 'error': '未提供数据'}), 400
 
     doc_id = data.get('doc_id')
     keyword = data.get('keyword', '')
     entity_type = data.get('entity_type')
 
     if not doc_id:
-        return jsonify({'success': False, 'error': 'doc_id is required'}), 400
+        return jsonify({'success': False, 'error': 'doc_id 参数是必需的'}), 400
 
     try:
         graph_retriever = get_graph_retriever()
@@ -282,13 +282,13 @@ def recognize_query_entities():
     data = request.get_json()
 
     if not data:
-        return jsonify({'success': False, 'error': 'No data provided'}), 400
+        return jsonify({'success': False, 'error': '未提供数据'}), 400
 
     query = data.get('query', '')
     doc_id = data.get('doc_id')
 
     if not query:
-        return jsonify({'success': False, 'error': 'query is required'}), 400
+        return jsonify({'success': False, 'error': 'query 参数是必需的'}), 400
 
     try:
         recognizer = QueryEntityRecognizer()
@@ -334,7 +334,7 @@ def find_entity_path():
     data = request.get_json()
 
     if not data:
-        return jsonify({'success': False, 'error': 'No data provided'}), 400
+        return jsonify({'success': False, 'error': '未提供数据'}), 400
 
     doc_id = data.get('doc_id')
     source_id = data.get('source_id')
@@ -342,7 +342,7 @@ def find_entity_path():
     max_length = data.get('max_length', 3)
 
     if not all([doc_id, source_id, target_id]):
-        return jsonify({'success': False, 'error': 'doc_id, source_id, and target_id are required'}), 400
+        return jsonify({'success': False, 'error': 'doc_id、source_id 和 target_id 参数是必需的'}), 400
 
     try:
         graph_retriever = get_graph_retriever()

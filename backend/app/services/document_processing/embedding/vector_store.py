@@ -146,6 +146,11 @@ class VectorStore:
                 'length': int(chunk.get('length', 0))
             }
 
+            # 添加知识库 ID（如果有）
+            kb_id = chunk.get('kb_id')
+            if kb_id:
+                metadata['kb_id'] = str(kb_id)
+
             # bbox 可选
             bbox = chunk.get('bbox')
             if bbox:

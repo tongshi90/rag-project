@@ -11,15 +11,15 @@ from app.services.user_interaction.conversation_processor import process_convers
 logger = logging.getLogger(__name__)
 
 
-@api_bp.route('/v1/ask', methods=['POST'])
-def ask():
+@api_bp.route('/chat', methods=['POST'])
+def chat():
     """
     开放问答接口
 
     请求体：
         {
             "question": "用户问题",      # 必填
-            "doc_id": "doc_001",         # 可选，指定文档ID
+            "kb_id": "kb_001",          # 可选，指定知识库ID，为空时从所有知识库检索
             "top_k": 5                   # 可选，默认5
         }
 
@@ -66,14 +66,14 @@ def ask():
             }), 400
 
         # 可选参数
-        doc_id = data.get('doc_id')
+        kb_id = data.get('kb_id')  # 知识库 ID，为空时从所有知识库检索
         top_k = data.get('top_k', 5)
 
         # 参数类型验证
-        if doc_id is not None and not isinstance(doc_id, str):
+        if kb_id is not None and not isinstance(kb_id, str):
             return jsonify({
                 'code': 40002,
-                'message': 'doc_id 参数类型错误',
+                'message': 'kb_id 参数类型错误',
                 'data': None
             }), 400
 
@@ -84,7 +84,7 @@ def ask():
                 'data': None
             }), 400
 
-        logger.info(f"[OpenAPI] 收到问题: {question[:100]}...")
+        logger.info(f"[OpenAPI] 收到问题: {question[:100]}..." + (f" [kb_id: {kb_id}]" if kb_id else " [所有知识库]"))
 
         # 调用对话处理流程
         result = process_conversation(
@@ -92,6 +92,7 @@ def ask():
             conversation_history=None,
             top_k=top_k,
             retrieval_top_k=top_k * 4,
+            kb_id=kb_id,  # 传递知识库 ID
             show_progress=False
         )
 
@@ -107,7 +108,7 @@ def ask():
 
         return jsonify({
             'code': 0,
-            'message': 'success',
+            'message': '操作成功',
             'data': {
                 'answer': answer
             }

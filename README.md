@@ -59,24 +59,6 @@ SILICONFLOW_API_KEY=your_api_key_here
 
 ## Docker 部署
 
-### 快速启动（使用 Docker Compose）
-
-```bash
-# 构建并启动所有服务
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
-
-# 停止服务
-docker-compose down
-
-# 停止并删除数据卷
-docker-compose down -v
-```
-
-### 手动构建与运行
-
 #### 后端
 
 ```bash
@@ -90,7 +72,8 @@ docker build -t rag-backend:latest .
 docker run -d \
   --name rag-backend \
   -p 5000:5000 \
-  --env SILICONFLOW_API_KEY=sk-edvfxjljpvthsvcgkikydaqxnktvcwhedacvcoddmxjgiexq \
+  -v /home/p40/ts/rag_project/data:/app/data \
+  -v /home/p40/ts/rag_project/skills:/app/skills \
   rag-backend:latest
 
 # 查看日志
@@ -111,27 +94,10 @@ cd frontend
 docker build -t rag-frontend:latest .
 
 # 运行容器（使用 -e 参数配置后端地址）
-# 方式1：通过宿主机访问（适用于前后端在不同服务器）
 docker run -d \
   --name rag-frontend \
   -p 8085:80 \
   -e API_BASE_URL=http://192.168.18.77:5000 \
-  rag-frontend:latest
-
-# 方式2：通过容器网络访问（适用于前后端在同一服务器）
-# 使用 --network host 或 --link 连接后端容器
-docker run -d \
-  --name rag-frontend \
-  -p 8085:80 \
-  -e API_BASE_URL=http://rag-backend:5000 \
-  --link rag-backend:rag-backend \
-  rag-frontend:latest
-
-# 方式3：本地开发环境（前后端在同一台机器）
-docker run -d \
-  --name rag-frontend \
-  -p 8085:80 \
-  -e API_BASE_URL=http://172.17.0.1:5000 \
   rag-frontend:latest
 
 # 查看日志
@@ -213,8 +179,8 @@ docker run -d \
   --name rag-backend \
   --restart unless-stopped \
   -p 5000:5000 \
-  -v $(pwd)/backend/data:/app/data \
-  -v $(pwd)/backend/uploads:/app/uploads \
+  -v /home/p40/ts/rag_project/data:/app/data \
+  -v /home/p40/ts/rag_project/skills:/app/skills \
   --env-file backend/.env \
   rag-backend:latest
 
@@ -231,6 +197,8 @@ echo "Services started!"
 echo "Frontend: http://localhost"
 echo "Backend: http://localhost:5000"
 echo "Frontend API URL: http://${LOCAL_IP}:5000"
+echo "Data mounted: /home/p40/ts/rag_project/data -> /app/data"
+echo "Skills mounted: /home/p40/ts/rag_project/skills -> /app/skills"
 ```
 
 **start.bat**
@@ -248,8 +216,8 @@ docker run -d ^
   --name rag-backend ^
   --restart unless-stopped ^
   -p 5000:5000 ^
-  -v %cd%\backend\data:/app/data ^
-  -v %cd%\backend\uploads:/app/uploads ^
+  -v /home/p40/ts/rag_project/data:/app/data ^
+  -v /home/p40/ts/rag_project/skills:/app/skills ^
   --env-file backend\.env ^
   rag-backend:latest
 
@@ -266,6 +234,8 @@ echo Services started!
 echo Frontend: http://localhost
 echo Backend: http://localhost:5000
 echo Frontend API URL: http://%LOCAL_IP%:5000
+echo Data mounted: /home/p40/ts/rag_project/data -^> /app/data
+echo Skills mounted: /home/p40/ts/rag_project/skills -^> /app/skills
 pause
 ```
 

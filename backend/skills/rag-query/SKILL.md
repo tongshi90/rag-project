@@ -1,65 +1,65 @@
 ---
 name: rag-query
-description: "Query knowledge base using RAG (Retrieval-Augmented Generation) platform. Use when: user asks for knowledge base information, needs to query specific documents, or requests involving knowledge retrieval or document search."
-homepage: https://github.com/openclaw/openclaw
+description: "使用 RAG（检索增强生成）平台查询知识库。适用于：用户询问知识库信息、需要查询特定文档、或涉及知识检索和文档搜索的请求。"
 metadata: {"openclaw": {"emoji": "🔍", "requires": {"bins": ["uv"]}}}
+
 
 ---
 
-# RAG Query - Knowledge Base Search
+# RAG 查询 - 知识库搜索
 
-Query your RAG platform knowledge base with natural language questions.
+使用自然语言问题查询您的 RAG 平台知识库。
 
-## Basic Query
-
-```bash
-uv run {baseDir}/main.py --question "你的问题"
-```
-
-## Advanced Options
-
-Query with specific document:
+## 基础查询
 
 ```bash
-uv run {baseDir}/main.py --question "问题" --doc-id "doc_123"
+uv run {baseDir}/scripts/main.py --question "你的问题"
 ```
 
-Custom API endpoint:
+## 高级选项
+
+查询指定文档：
 
 ```bash
-uv run {baseDir}/main.py --question "问题" --api-url "http://localhost:8080"
+uv run {baseDir}/scripts/main.py --question "问题" --doc-id "doc_123"
 ```
 
-Custom timeout:
+自定义 API 端点：
 
 ```bash
-uv run {baseDir}/main.py --question "问题" --timeout 180
+uv run {baseDir}/scripts/main.py --question "问题" --api-url "http://localhost:8080"
 ```
 
-## Usage Examples
+自定义超时时间：
 
-**User:** "What is the RAG platform?"
-**Execute:** `uv run {baseDir}/main.py --question "What is the RAG platform?"`
+```bash
+uv run {baseDir}/scripts/main.py --question "问题" --timeout 180
+```
 
-**User:** "How to upload documents?"
-**Execute:** `uv run {baseDir}/main.py --question "How to upload documents?"`
+## 使用示例
 
-## Notes
+**用户：** "什么是 RAG 平台？"
+**执行：** `uv run {baseDir}/scripts/main.py --question "什么是 RAG 平台？"`
 
-- The script outputs the RAG response directly
-- Supports Chinese and English queries
-- Requires RAG service to be running and accessible
-- Timeout errors indicate the RAG service is down or slow
+**用户：** "如何上传文档？"
+**执行：** `uv run {baseDir}/scripts/main.py --question "如何上传文档？"`
 
-## Target Audience & Use Cases
+## 注意事项
 
-| Use Case | Target Audience |
-|----------|-----------------|
-| 经营分析 | ST成员 |
-| 解决方案 | 解决方案专家 |
-| 驱动代码评审 | - |
-| 内核代码评审 | - |
-| 项目跟踪 | 项目经理（自动收集） |
-| PMT运作 | PMT成员 |
-| 产品定义与设计 | 产品经理 |
-| 人才画像Skill | HR、AT成员 |
+- 脚本直接输出 RAG 响应结果
+- 支持中英文查询
+- 需要 RAG 服务处于运行状态且可访问
+- 超时错误表明 RAG 服务未运行或响应缓慢
+
+## 目标用户与使用场景
+
+| 使用场景       | 目标用户             |
+| -------------- | -------------------- |
+| 经营分析       | ST成员               |
+| 解决方案       | 解决方案专家         |
+| 驱动代码评审   | -                    |
+| 内核代码评审   | -                    |
+| 项目跟踪       | 项目经理（自动收集） |
+| PMT运作        | PMT成员              |
+| 产品定义与设计 | 产品经理             |
+| 人才画像Skill  | HR、AT成员           |

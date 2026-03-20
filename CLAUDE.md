@@ -1,19 +1,20 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+此文件为 Claude Code (claude.ai/code) 提供项目指导。
 
 ---
 
 ## 项目概述
 
-这是一个**混合增强检索生成（Hybrid RAG）系统**，采用 React TypeScript 前端 + Python Flask 后端架构。系统允许用户上传 PDF 文档，自动解析提取文本/表格/图片，构建向量索引、关键字索引和知识图谱，支持 AI 问答。
+这是一个 **RAG（检索增强生成）问答系统**，采用 React TypeScript 前端 + Python Flask 后端架构。系统允许用户上传 PDF 文档，自动解析提取内容并构建向量索引，支持 AI 问答。
 
-**系统架构特点**：采用**离线索引 + 在线混合检索**的两阶段架构设计。
-
-```
-离线阶段（文档处理）：PDF → 拆分 → 验证 → 优化 → 实体抽取 → 关系抽取 → 图谱构建 → 关键字索引 → 向量化 → 存储
-在线阶段（用户交互）：查询 → 实体识别 → 混合检索(向量+关键字+图谱) → RRF融合 → 重排序 → LLM生成 → 答案
-```
+**核心特性**：
+- 文档上传与解析（PDF）
+- 向量化存储（ChromaDB）
+- 语义检索与重排序
+- 流式 AI 对话
+- 技能卡片管理系统
+- 开放 API 接口
 
 ---
 
@@ -43,78 +44,22 @@ sqlite3 backend/data/rag.db
 # 查看向量库统计
 cd backend && python -c "from app.services.document_processing.embedding import get_vector_store; print(get_vector_store().get_stats())"
 
-# 查看知识图谱统计
-cd backend && python -c "from app.services.document_processing.graph_builder import get_graph_builder; gb = get_graph_builder(); gb.load_graph('doc_id'); print(gb.get_graph_stats())"
-
 # 测试 API
 curl http://localhost:5000/health
 curl http://localhost:5000/api/files
-curl http://localhost:5000/api/graph/stats/<doc_id>
+curl http://localhost:5000/api/chat/health
 ```
 
 ---
 
 ## 核心架构
 
-### 两阶段数据流
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ 阶段一：文档处理（Document Processing）- 离线、异步                      │
-├────────────────────────────────────────────────────────────────────────┤
-│  用户上传 PDF                                                          │
-│      ↓                                                                 │
-│  [1] Splitter: PDF → Chunks（text_splitter.py）                        │
-│      ↓                                                                 │
-│  [2] Validator: 质量检测（validate.py）                                 │
-│      ↓                                                                 │
-│  [3] Optimizer: LLM 优化（chunk_optimizer.py）                         │
-│      ↓                                                                 │
-│  [4] Entity Extraction: 实体抽取（entity_extractor.py）                 │
-│      ↓                                                                 │
-│  [5] Relation Extraction: 关系抽取（relation_extractor.py）             │
-│      ↓                                                                 │
-│  [6] Graph Builder: 知识图谱构建（graph_builder.py）                    │
-│      ↓                                                                 │
-│  [7] Keyword Index: 关键字索引（keyword_indexer.py）                    │
-│      ↓                                                                 │
-│  [8] Embedding: 向量化存储（encoder.py + vector_store.py）              │
-│      ↓                                                                 │
-│  ChromaDB + Graph + Keyword Index                                      │
-└────────────────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────────────────┐
-│ 阶段二：用户交互（User Interaction）- 在线、实时                         │
-├────────────────────────────────────────────────────────────────────────┤
-│  用户提问                                                               │
-│      ↓                                                                 │
-│  [1] Question Splitter: 复杂问题拆分（question_splitter.py）            │
-│      ↓                                                                 │
-│  [2] Entity Recognizer: 实体识别（entity_recognizer.py）               │
-│      ↓                                                                 │
-│  [3] Query Encoder: 问题向量化（query_encoder.py）                      │
-│      ↓                                                                 │
-│  [4] Hybrid Retrieval: 混合检索（retrieval.py）                         │
-│      ├─ Vector Search: 向量检索                                         │
-│      ├─ Keyword Search: BM25 关键字检索                                │
-│      └─ Graph Search: 图谱邻域检索                                     │
-│      ↓                                                                 │
-│  [5] RRF Fusion: 结果融合（Reciprocal Rank Fusion）                     │
-│      ↓                                                                 │
-│  [6] Reranker: 重排序（Cross-Encoder）                                  │
-│      ↓                                                                 │
-│  [7] Generator: LLM 答案生成（generator.py）                            │
-│      ↓                                                                 │
-│  返回答案                                                               │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
 ### 后端分层架构
 
 | 层次 | 目录 | 职责 | 关键文件 |
 |------|------|------|----------|
-| **路由层** | `api/` | HTTP 请求处理、参数验证 | `files.py`, `chat.py`, `graph.py` |
-| **模型层** | `models/` | 数据结构定义、SQLite CRUD | `file.py` |
+| **路由层** | `api/` | HTTP 请求处理、参数验证 | `files.py`, `chat.py`, `skills.py`, `skill_files.py` |
+| **模型层** | `models/` | 数据结构定义、SQLite CRUD | `file.py`, `skill_card.py` |
 | **服务层** | `services/` | 业务逻辑、RAG 核心处理 | 见下方详细说明 |
 | **配置层** | `config/` | 环境配置、模型配置、路径管理 | `model_config.py`, `paths.py` |
 
@@ -122,11 +67,13 @@ curl http://localhost:5000/api/graph/stats/<doc_id>
 
 ```
 services/
-├── document_processing/          # 离线文档处理
-│   ├── document_processor.py     # ★流程编排主入口
+├── document_processing/          # 文档处理
+│   ├── document_processor.py     # 流程编排主入口
 │   ├── splitter/                 # PDF → Chunks
-│   │   └── text_splitter.py      # 关键字提取
-│   ├── validator/                # 质量检测（8种验证规则）
+│   │   ├── text_splitter.py      # 文本分片
+│   │   ├── form_splitter.py      # 表单分片
+│   │   └── img_splitter.py       # 图片分片
+│   ├── validator/                # 质量检测
 │   ├── optimizer/                # LLM 辅助优化
 │   ├── entity_extraction/        # 实体抽取
 │   ├── relation_extraction/      # 关系抽取
@@ -137,83 +84,59 @@ services/
 │       ├── vector_store.py       # ChromaDB 封装
 │       └── batch_processor.py    # 批量处理器
 │
-└── user_interaction/             # 在线用户交互
+└── user_interaction/             # 用户交互
     ├── question_splitter/        # 问题拆分
     ├── entity_recognizer/        # 实体识别
     ├── query_encoder/            # 问题向量化
-    ├── retrieval/                # 混合检索 + 重排序
-    │   └── retrieval.py          # HybridRetrievalPipeline
+    ├── retrieval/                # 检索 + 重排序
     ├── graph_retrieval/          # 图谱检索
     ├── context_enricher/         # 上下文增强
-    └── generator/                # LLM 生成
+    ├── generator/                # LLM 生成
+    └── conversation_processor.py # 对话处理主入口
 ```
 
 ---
 
 ## 关键设计模式
 
-### 1. 文档处理流程编排
+### 1. 文档处理流程
 
 **入口**：`services/document_processing/document_processor.py`
 
 ```python
-from app.services.document_processing import process_document
+from app.services import parse_pdf
 
-# 完整八步流程
-result = process_document(pdf_path, doc_id)
+# 处理 PDF 文档
+result = parse_pdf(file_path, doc_id)
 # 返回: {"success": True, "steps": {...}, "total_elapsed": ...}
 ```
 
 **异步执行**：文件上传后，`api/files.py` 在后台线程中调用处理流程，立即返回响应。
 
-### 2. 混合检索管道
+### 2. 对话处理流程
 
-**入口**：`services/user_interaction/retrieval/retrieval.py`
-
-```python
-from app.services.user_interaction.retrieval import HybridRetrievalPipeline
-
-pipeline = HybridRetrievalPipeline(
-    weights={'vector': 0.5, 'keyword': 0.3, 'graph': 0.2}
-)
-
-results = pipeline.retrieve(
-    query="用户问题",
-    query_embedding=embedding,
-    doc_id="文档ID",
-    entity_ids=["实体ID列表"],
-    enable_vector=True,
-    enable_keyword=True,
-    enable_graph=True
-)
-```
-
-**RRF 融合算法**：
-```
-score(chunk) = w1/(k+rank_vector) + w2/(k+rank_keyword) + w3/(k+rank_graph)
-```
-
-### 3. 知识图谱操作
-
-**NetworkX 集成**：`services/document_processing/graph_builder/graph_builder.py`
+**入口**：`services/user_interaction/conversation_processor.py`
 
 ```python
-from app.services.document_processing.graph_builder import get_graph_builder
+from app.services.user_interaction import process_conversation
 
-graph = get_graph_builder()
-
-# 构建图谱
-graph.build_graph(entities, relations, doc_id)
-graph.save_graph(doc_id)
-
-# 邻域检索
-neighbors = graph.get_neighbors("entity_id", hop_depth=2)
-
-# 路径查找
-paths = graph.find_path("entity_1", "entity_2", max_length=3)
+result = process_conversation(
+    question="用户问题",
+    conversation_history=None,
+    top_k=5,
+    retrieval_top_k=20
+)
+# 返回: {"success": True, "answer": "...", "total_elapsed": ...}
 ```
 
-### 4. 配置管理模式
+**流程**：
+1. 问题拆分（LLM）
+2. 问题向量化
+3. 向量检索（ChromaDB）
+4. 重排序（Rerank 模型）
+5. 答案生成（LLM）
+
+### 3. 配置管理模式
 
 **单一配置源**：所有配置从 `.env.example` 读取（通过 `config/model_config.py`）
 
@@ -226,12 +149,12 @@ from app.config.model_config import (
 
 chat = get_chat_model()                   # 工厂模式获取模型实例
 embedding = get_embedding_model()
-entity_llm = get_entity_extraction_model() # 实体抽取专用模型
+entity_llm = get_entity_extraction_model()
 ```
 
 **抽象基类**：`OCRModel`, `ChatModel`, `EmbeddingModel`, `RerankModel` 定义统一接口。
 
-### 5. 路径管理策略
+### 4. 路径管理策略
 
 **跨平台兼容**：`config/paths.py` 统一管理所有路径
 
@@ -248,8 +171,6 @@ from app.config.paths import (
 
 ### Chunk 标准格式
 
-所有文档分片遵循统一格式：
-
 ```python
 {
     "chunk_id": "doc_001_1",        # {file_id}_{order}
@@ -260,36 +181,8 @@ from app.config.paths import (
     "page": 12,                     # 所在页码
     "type": "text",                 # text/table/image
     "length": 62,                   # 字符数
-    "keywords": ["RAG", "检索"],     # 关键字（新增）
-    "embedding": [0.12, 0.34, ...]  # 向量表示（1536维）
-}
-```
-
-### 实体格式
-
-```python
-{
-    "entity_id": "doc_001_0",       # {doc_id}_{index}
-    "text": "RAG",                  # 实体文本
-    "type": "技术概念",              # 实体类型
-    "chunk_id": "doc_001_1",        # 所在分片
-    "doc_id": "doc_001",            # 所属文档
-    "description": ""               # 描述（可选）
-}
-```
-
-### 关系格式
-
-```python
-{
-    "relation_id": "doc_001_R0",    # {doc_id}_R{index}
-    "source": "RAG",                 # 源实体文本
-    "target": "检索增强生成",         # 目标实体文本
-    "source_id": "doc_001_0",        # 源实体ID
-    "target_id": "doc_001_1",        # 目标实体ID
-    "relation_type": "包含关系",     # 关系类型
-    "description": "",               # 关系描述
-    "doc_id": "doc_001"
+    "keywords": ["RAG", "检索"],     # 关键字
+    "embedding": [0.12, 0.34, ...]  # 向量表示
 }
 ```
 
@@ -309,6 +202,19 @@ CREATE TABLE files (
 )
 ```
 
+**Skill Cards 表**（SQLite）：
+```sql
+CREATE TABLE skill_cards (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    skill_code TEXT UNIQUE NOT NULL,
+    published BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+```
+
 ---
 
 ## API 端点
@@ -318,8 +224,11 @@ CREATE TABLE files (
 | 端点 | 方法 | 描述 |
 |------|------|------|
 | `/api/files` | GET | 获取文件列表 |
-| `/api/files` | POST | 上传文件 |
+| `/api/files/upload` | POST | 上传文件 |
+| `/api/files/<id>` | GET | 获取单个文件 |
 | `/api/files/<id>` | DELETE | 删除文件 |
+| `/api/files/all` | DELETE | 删除所有文件 |
+| `/api/files/<id>/stats` | GET | 获取文件统计 |
 
 ### 对话接口
 
@@ -329,70 +238,33 @@ CREATE TABLE files (
 | `/api/chat/stream` | POST | 流式对话（SSE） |
 | `/api/chat/health` | GET | 健康检查 |
 
-### 知识图谱接口
+### 技能卡片管理
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/graph/stats/<doc_id>` | GET | 获取图谱统计 |
-| `/api/graph/entities/<doc_id>` | GET | 获取文档实体 |
-| `/api/graph/neighbors` | POST | 获取实体邻居 |
-| `/api/graph/search` | POST | 搜索实体 |
-| `/api/graph/recognize` | POST | 识别问题实体 |
-| `/api/graph/path` | POST | 查找实体路径 |
+| `/api/skills` | GET | 获取技能列表 |
+| `/api/skills` | POST | 创建技能 |
+| `/api/skills/<id>` | GET | 获取单个技能 |
+| `/api/skills/<id>` | PUT | 更新技能 |
+| `/api/skills/<id>` | DELETE | 删除技能 |
+| `/api/skills/<id>/publish` | PUT | 发布技能 |
+| `/api/skills/<id>/unpublish` | PUT | 取消发布 |
 
----
+### 技能文件管理
 
-## 混合检索使用示例
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/skills/<id>/files` | GET | 列出技能文件 |
+| `/api/skills/<id>/files/content` | GET | 获取文件内容 |
+| `/api/skills/<id>/files` | POST | 创建文件 |
+| `/api/skills/<id>/files` | PUT | 更新文件 |
+| `/api/skills/<id>/files` | DELETE | 删除文件 |
 
-### 基础向量检索
+### 开放 API
 
-```python
-from app.services.user_interaction import process_conversation
-
-result = process_conversation("什么是RAG？")
-print(result['answer'])
-```
-
-### 混合检索（推荐）
-
-```python
-from app.services.user_interaction import process_conversation_hybrid
-
-result = process_conversation_hybrid(
-    question="RAG系统中包含哪些组件？",
-    doc_id="doc_xxx",
-    enable_vector=True,
-    enable_keyword=True,
-    enable_graph=True,
-    weights={'vector': 0.5, 'keyword': 0.3, 'graph': 0.2}
-)
-
-# 查看识别的实体
-for entity in result['recognized_entities']:
-    print(f"{entity['text']} ({entity['type']})")
-```
-
-### 直接使用检索管道
-
-```python
-from app.services.user_interaction.retrieval import HybridRetrievalPipeline
-from app.services.user_interaction.entity_recognizer import QueryEntityRecognizer
-
-pipeline = HybridRetrievalPipeline()
-recognizer = QueryEntityRecognizer()
-
-# 识别实体
-entities = recognizer.recognize_entities(query, doc_id)
-entity_ids = recognizer.get_entity_ids(entities, doc_id)
-
-# 混合检索
-results = pipeline.retrieve(
-    query=query,
-    query_embedding=embedding,
-    doc_id=doc_id,
-    entity_ids=entity_ids
-)
-```
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/v1/ask` | POST | 开放问答接口 |
 
 ---
 
@@ -403,10 +275,10 @@ results = pipeline.retrieve(
 - **异步处理**：文件处理是异步的，通过状态字段（`parsing/completed/failed`）追踪进度
 - **路径处理**：使用 `pathlib.Path` 而非字符串拼接，确保跨平台兼容
 - **错误处理**：统一返回格式 `{"success": bool, "data": {...}, "error": str}`
-- **向后兼容**：图谱/索引加载失败时，自动回退到纯向量检索
+- **CORS**：开发环境允许所有源访问
 
 ### 前端
-- **API 基础 URL**：开发时 `http://localhost:5000`，生产环境需配置代理
+- **API 基础 URL**：开发时 `http://127.0.0.1:5000`，生产环境需配置代理
 - **类型定义**：所有 API 响应类型在 `types/index.ts` 中定义
 - **状态管理**：使用 React Hooks（useState），暂无全局状态管理
 
@@ -417,28 +289,11 @@ results = pipeline.retrieve(
 - 查看关键字索引：`data/keyword_index/` 目录
 - 文件处理日志会打印到控制台（异步线程输出）
 
-### 性能优化
-- **实体抽取**：使用批量处理减少 API 调用（默认 batch_size=5）
-- **图谱检索**：限制邻域跳数和最大邻居数避免性能问题
-- **RRF 融合**：使用常数 k=60 平衡各路检索结果
-- **缓存策略**：图谱和索引按需加载，避免频繁 I/O
-
 ---
 
 ## 依赖包说明
 
-### 新增依赖（混合检索）
-
-```txt
-# 图谱处理
-networkx==3.2.1
-
-# 关键字检索
-jieba==0.42.1
-rank-bm25==0.2.2
-```
-
-### 现有依赖
+### 后端依赖
 
 ```txt
 # Web 框架
@@ -453,6 +308,13 @@ Pillow==11.0.0
 # 向量数据库
 chromadb>=0.5.0
 
+# 图谱处理
+networkx==3.2.1
+
+# 关键字检索
+jieba==0.42.1
+rank-bm25==0.2.2
+
 # API 调用
 requests==2.32.3
 
@@ -461,4 +323,122 @@ python-dotenv==1.0.0
 tiktoken
 numpy
 tqdm==4.66.1
+```
+
+### 前端依赖
+
+```json
+{
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.8"
+  }
+}
+```
+
+---
+
+## 模型配置说明
+
+系统使用 **SiliconFlow** 提供的模型服务：
+
+| 功能 | 模型 | 用途 |
+|------|------|------|
+| OCR | Qwen/Qwen2-VL-72B-Instruct | 图片文字识别 |
+| Chat | Qwen/Qwen2.5-72B-Instruct | 对话生成 |
+| Embedding | Qwen/Qwen3-Embedding-4B | 文本向量化 |
+| Rerank | Qwen/Qwen3-Reranker-0.6B | 检索结果重排序 |
+| Text Splitter | Qwen/Qwen2.5-7B-Instruct | 分片优化/问题拆分 |
+| Entity Extraction | Qwen/Qwen2.5-7B-Instruct | 实体抽取 |
+
+配置文件：`backend/.env.example`
+
+---
+
+## 技能卡片系统
+
+技能卡片是一个可发布、可管理的技能包系统：
+
+### 技能生命周期
+
+```
+创建技能 → 编辑文件 → 发布技能 → [只读] → 取消发布 → [可编辑]
+```
+
+### 技能文件结构
+
+```
+data/skills/
+├── skill_code_1/           # 技能目录
+│   ├── config.yaml
+│   ├── main.py
+│   └── README.md
+├── skill_code_2/
+│   └── ...
+└── _published/             # 发布的技能包（zip）
+    ├── skill_code_1.zip
+    └── skill_code_2.zip
+```
+
+### 发布状态
+
+- **未发布**：可编辑技能信息和文件
+- **已发布**：只读模式，生成 zip 包，不可修改或删除
+
+---
+
+## Docker 部署
+
+项目支持 Docker 容器化部署：
+
+### 构建镜像
+```bash
+docker build -t rag-app .
+```
+
+### 运行容器
+```bash
+docker run -p 3000:3000 -p 5000:5000 rag-app
+```
+
+### 环境变量
+- `API_BASE_URL`：后端 API 地址（前端配置）
+
+---
+
+## 项目目录结构
+
+```
+rag_project/
+├── backend/                    # 后端服务
+│   ├── app/
+│   │   ├── api/               # API 路由
+│   │   ├── config/            # 配置模块
+│   │   ├── models/            # 数据模型
+│   │   └── services/          # 业务服务
+│   ├── data/                  # 数据目录
+│   │   ├── upload/            # 上传文件
+│   │   ├── vector_db/         # 向量数据库
+│   │   ├── graph/             # 知识图谱
+│   │   ├── keyword_index/     # 关键字索引
+│   │   └── rag.db             # SQLite 数据库
+│   ├── requirements.txt
+│   └── run.py
+├── frontend/                   # 前端服务
+│   ├── src/
+│   │   ├── components/        # React 组件
+│   │   ├── services/          # API 服务
+│   │   ├── types/             # TypeScript 类型
+│   │   └── config.ts          # 配置文件
+│   └── package.json
+└── CLAUDE.md                   # 本文件
 ```

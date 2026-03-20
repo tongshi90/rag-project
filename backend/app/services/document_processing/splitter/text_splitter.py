@@ -967,7 +967,7 @@ def dedup_same_format_titles(chunks: List[Dict]) -> List[Dict]:
     return result
 
 
-def post_process_chunks(chunks: List[Dict], file_id: str = None) -> List[Dict]:
+def post_process_chunks(chunks: List[Dict], file_id: str = None, kb_id: str = None) -> List[Dict]:
     """
     对生成的 chunk 进行后处理
     1. 合并仅有标题的 chunk
@@ -975,6 +975,7 @@ def post_process_chunks(chunks: List[Dict], file_id: str = None) -> List[Dict]:
     3. 重新调整 order 和 chunk_id
     4. 保留页码信息
     5. 提取关键字
+    6. 添加知识库 ID
     """
     chunks = merge_title_only_chunks(chunks)
 
@@ -992,6 +993,10 @@ def post_process_chunks(chunks: List[Dict], file_id: str = None) -> List[Dict]:
             chunk["chunk_id"] = str(new_order)
             chunk["doc_id"] = "unknown"
 
+        # 添加知识库 ID（如果有）
+        if kb_id:
+            chunk["kb_id"] = kb_id
+
         # 提取关键字
         chunk["keywords"] = extract_keywords(chunk.get("text", ""), top_k=10)
         chunk["length"] = len(chunk.get("text", ""))
@@ -1000,12 +1005,17 @@ def post_process_chunks(chunks: List[Dict], file_id: str = None) -> List[Dict]:
     return chunks
 
 
-def split_pdf_to_chunks(pdf_path: str, file_id: str = None) -> tuple[List[Dict], List]:
+def split_pdf_to_chunks(pdf_path: str, file_id: str = None, kb_id: str = None) -> tuple[List[Dict], List]:
     """
     从 PDF 文件直接生成 chunks
 
     TODO: 当前仅处理文本内容，表格和图片数据未包含
     TODO: 需要调用 split_tables_from_pdf() 和 split_images_from_pdf() 并合并结果
+
+    Args:
+        pdf_path: PDF 文件路径
+        file_id: 文档 ID
+        kb_id: 知识库 ID（可选）
 
     Returns:
         (chunks, title_patterns): 分片列表和标题正则规则
@@ -1015,7 +1025,7 @@ def split_pdf_to_chunks(pdf_path: str, file_id: str = None) -> tuple[List[Dict],
     lines = remove_page_numbers(pages)
     title_patterns = refine_title_patterns(lines)
     chunks = split_chunks(lines, title_patterns)
-    chunks = post_process_chunks(chunks, file_id)
+    chunks = post_process_chunks(chunks, file_id, kb_id)
     return chunks, title_patterns
 
 

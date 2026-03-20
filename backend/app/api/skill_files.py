@@ -16,20 +16,72 @@ def get_skill_folder(skill_code: str) -> Path:
     return SKILLS_PATH / skill_code
 
 
+def build_file_tree(base_path: Path, relative_path: str = '') -> list:
+    """
+    Recursively build file tree structure
+
+    Args:
+        base_path: The base skill folder path
+        relative_path: Current relative path from base (empty for root)
+
+    Returns:
+        List of file/folder items with children
+    """
+    current_path = base_path / relative_path if relative_path else base_path
+
+    if not current_path.exists() or not current_path.is_dir():
+        return []
+
+    items = []
+    for item in current_path.iterdir():
+        # Skip hidden files/folders
+        if item.name.startswith('.'):
+            continue
+
+        relative_item_path = str(item.relative_to(base_path)) if relative_path else item.name
+
+        if item.is_file():
+            items.append({
+                'name': item.name,
+                'path': relative_item_path.replace('\\', '/'),
+                'isFile': True,
+                'size': item.stat().st_size,
+                'modifiedTime': item.stat().st_mtime,
+                'children': []
+            })
+        elif item.is_dir():
+            children = build_file_tree(base_path, relative_item_path)
+            items.append({
+                'name': item.name,
+                'path': relative_item_path.replace('\\', '/'),
+                'isFile': False,
+                'size': 0,
+                'modifiedTime': item.stat().st_mtime,
+                'children': children,
+                'hasChildren': len(children) > 0
+            })
+
+    # Sort: directories first (isFile=False=0), then files (isFile=True=1), alphabetically
+    # SKILL.md always goes to the bottom
+    items.sort(key=lambda x: (x['isFile'], x['name'] == 'SKILL.md', x['name']))
+
+    return items
+
+
 @api_bp.route('/skills/<skill_id>/files', methods=['GET'])
 def list_skill_files(skill_id):
     """
-    List all files in a skill folder
+    List all files in a skill folder (recursive tree structure)
 
-    Returns both files and directories (non-recursive)
+    Returns both files and directories with nested children
     """
     # Check if skill exists
     skill_card = skill_card_db.get_skill_card_by_id(skill_id)
     if not skill_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill not found',
-            'message': 'Skill not found'
+            'error': '技能不存在',
+            'message': '技能不存在'
         }), 404
 
     skill_folder = get_skill_folder(skill_card.skill_code)
@@ -37,33 +89,15 @@ def list_skill_files(skill_id):
         return jsonify({
             'code': 0,
             'data': [],
-            'message': 'Success'
+            'message': '操作成功'
         })
 
-    files = []
-    for item in skill_folder.iterdir():
-        if item.is_file():
-            files.append({
-                'name': item.name,
-                'isFile': True,
-                'size': item.stat().st_size,
-                'modifiedTime': item.stat().st_mtime
-            })
-        elif item.is_dir():
-            files.append({
-                'name': item.name,
-                'isFile': False,
-                'size': 0,
-                'modifiedTime': item.stat().st_mtime
-            })
-
-    # Sort: directories first, then files
-    files.sort(key=lambda x: (not x['isFile'], x['name']))
+    files = build_file_tree(skill_folder)
 
     return jsonify({
         'code': 0,
         'data': files,
-        'message': 'Success'
+        'message': '操作成功'
     })
 
 
@@ -80,24 +114,24 @@ def get_skill_file_content(skill_id):
     if not skill_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill not found',
-            'message': 'Skill not found'
+            'error': '技能不存在',
+            'message': '技能不存在'
         }), 404
 
     file_path = request.args.get('path', '').strip()
     if not file_path:
         return jsonify({
             'code': 400,
-            'error': 'File path is required',
-            'message': 'File path is required'
+            'error': '文件路径不能为空',
+            'message': '文件路径不能为空'
         }), 400
 
     # Security: prevent path traversal (cross-platform compatible)
     if '..' in file_path or Path(file_path).is_absolute():
         return jsonify({
             'code': 400,
-            'error': 'Invalid file path',
-            'message': 'Invalid file path'
+            'error': '无效的文件路径',
+            'message': '无效的文件路径'
         }), 400
 
     skill_folder = get_skill_folder(skill_card.skill_code)
@@ -106,19 +140,20 @@ def get_skill_file_content(skill_id):
     if not full_path.exists() or not full_path.is_file():
         return jsonify({
             'code': 404,
-            'error': 'File not found',
-            'message': 'File not found'
+            'error': '文件不存在',
+            'message': '文件不存在'
         }), 404
 
     # Check if file is text-based (safe to read)
     # Only allow certain file extensions
-    allowed_extensions = {'.txt', '.py', '.js', '.json', '.yaml', '.yml', '.xml', '.html', '.css', '.md', '.bat', '.sh', '.conf', '.cfg', '.ini'}
-    if full_path.suffix.lower() not in allowed_extensions:
-        return jsonify({
-            'code': 400,
-            'error': 'File type not supported for viewing',
-            'message': 'File type not supported for viewing'
-        }), 400
+    # Temporarily disabled - allow all file types to be opened as text
+    # allowed_extensions = {'.txt', '.py', '.js', '.json', '.yaml', '.yml', '.toml', '.xml', '.html', '.css', '.md', '.bat', '.sh', '.conf', '.cfg', '.ini'}
+    # if full_path.suffix.lower() not in allowed_extensions:
+    #     return jsonify({
+    #         'code': 400,
+    #         'error': 'File type not supported for viewing',
+    #         'message': 'File type not supported for viewing'
+    #     }), 400
 
     try:
         content = full_path.read_text(encoding='utf-8')
@@ -130,59 +165,61 @@ def get_skill_file_content(skill_id):
                 'content': content,
                 'size': full_path.stat().st_size
             },
-            'message': 'Success'
+            'message': '操作成功'
         })
     except Exception as e:
         return jsonify({
             'code': 500,
-            'error': f'Failed to read file: {str(e)}',
-            'message': f'Failed to read file: {str(e)}'
+            'error': f'读取文件失败: {str(e)}',
+            'message': f'读取文件失败: {str(e)}'
         }), 500
 
 
 @api_bp.route('/skills/<skill_id>/files', methods=['POST'])
 def create_skill_file(skill_id):
     """
-    Create a new file in the skill folder
+    Create a new file or folder in the skill folder
 
     Request body:
-        - path: relative path for the new file (e.g., 'newfile.txt' or 'subdir/file.txt')
+        - path: relative path for the new file/folder (e.g., 'newfile.txt' or 'subdir/file.txt')
         - content: file content (optional, empty string if not provided)
+        - isFolder: boolean, true to create a folder (optional, default false)
     """
     # Check if skill exists
     skill_card = skill_card_db.get_skill_card_by_id(skill_id)
     if not skill_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill not found',
-            'message': 'Skill not found'
+            'error': '技能不存在',
+            'message': '技能不存在'
         }), 404
 
     # Check if skill is published - read-only mode
     if skill_card.published:
         return jsonify({
             'code': 403,
-            'error': 'Cannot modify published skill',
-            'message': 'Published skills are read-only. Please unpublish first to modify files.'
+            'error': '无法修改已发布的技能',
+            'message': '已发布的技能为只读状态，请先取消发布后再修改文件'
         }), 403
 
     data = request.get_json()
     file_path = data.get('path', '').strip()
     content = data.get('content', '')
+    is_folder = data.get('isFolder', False)
 
     if not file_path:
         return jsonify({
             'code': 400,
-            'error': 'File path is required',
-            'message': 'File path is required'
+            'error': '文件路径不能为空',
+            'message': '文件路径不能为空'
         }), 400
 
     # Security: prevent path traversal (cross-platform compatible)
     if '..' in file_path or Path(file_path).is_absolute():
         return jsonify({
             'code': 400,
-            'error': 'Invalid file path',
-            'message': 'Invalid file path'
+            'error': '无效的文件路径',
+            'message': '无效的文件路径'
         }), 400
 
     skill_folder = get_skill_folder(skill_card.skill_code)
@@ -191,30 +228,45 @@ def create_skill_file(skill_id):
     # Create parent directories if needed
     full_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Check if file already exists
-    if full_path.exists() and full_path.is_file():
+    # Check if path already exists
+    if full_path.exists():
         return jsonify({
             'code': 400,
-            'error': 'File already exists',
-            'message': 'File already exists'
+            'error': '路径已存在',
+            'message': '路径已存在'
         }), 400
 
     try:
-        full_path.write_text(content, encoding='utf-8')
-        return jsonify({
-            'code': 0,
-            'data': {
-                'name': full_path.name,
-                'path': file_path,
-                'size': full_path.stat().st_size
-            },
-            'message': 'File created successfully'
-        }), 201
+        if is_folder:
+            # Create folder
+            full_path.mkdir(parents=True, exist_ok=True)
+            return jsonify({
+                'code': 0,
+                'data': {
+                    'name': full_path.name,
+                    'path': file_path,
+                    'isFile': False
+                },
+                'message': '文件夹创建成功'
+            }), 201
+        else:
+            # Create file
+            full_path.write_text(content, encoding='utf-8')
+            return jsonify({
+                'code': 0,
+                'data': {
+                    'name': full_path.name,
+                    'path': file_path,
+                    'isFile': True,
+                    'size': full_path.stat().st_size
+                },
+                'message': '文件创建成功'
+            }), 201
     except Exception as e:
         return jsonify({
             'code': 500,
-            'error': f'Failed to create file: {str(e)}',
-            'message': f'Failed to create file: {str(e)}'
+            'error': f'创建失败: {str(e)}',
+            'message': f'创建失败: {str(e)}'
         }), 500
 
 
@@ -233,16 +285,16 @@ def update_skill_file(skill_id):
     if not skill_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill not found',
-            'message': 'Skill not found'
+            'error': '技能不存在',
+            'message': '技能不存在'
         }), 404
 
     # Check if skill is published - read-only mode
     if skill_card.published:
         return jsonify({
             'code': 403,
-            'error': 'Cannot modify published skill',
-            'message': 'Published skills are read-only. Please unpublish first to modify files.'
+            'error': '无法修改已发布的技能',
+            'message': '已发布的技能为只读状态，请先取消发布后再修改文件'
         }), 403
 
     data = request.get_json()
@@ -253,17 +305,25 @@ def update_skill_file(skill_id):
     if not file_path:
         return jsonify({
             'code': 400,
-            'error': 'File path is required',
-            'message': 'File path is required'
+            'error': '文件路径不能为空',
+            'message': '文件路径不能为空'
         }), 400
 
     # Security: prevent path traversal (cross-platform compatible)
     if '..' in file_path or Path(file_path).is_absolute():
         return jsonify({
             'code': 400,
-            'error': 'Invalid file path',
-            'message': 'Invalid file path'
+            'error': '无效的文件路径',
+            'message': '无效的文件路径'
         }), 400
+
+    # Protect system files - SKILL.md cannot be renamed
+    if file_path == 'SKILL.md' and new_path and new_path != file_path:
+        return jsonify({
+            'code': 403,
+            'error': '无法重命名系统文件',
+            'message': 'SKILL.md 是系统文件，不能重命名'
+        }), 403
 
     skill_folder = get_skill_folder(skill_card.skill_code)
     old_full_path = skill_folder / file_path
@@ -271,8 +331,8 @@ def update_skill_file(skill_id):
     if not old_full_path.exists():
         return jsonify({
             'code': 404,
-            'error': 'File not found',
-            'message': 'File not found'
+            'error': '文件不存在',
+            'message': '文件不存在'
         }), 404
 
     try:
@@ -281,8 +341,8 @@ def update_skill_file(skill_id):
             if '..' in new_path or Path(new_path).is_absolute():
                 return jsonify({
                     'code': 400,
-                    'error': 'Invalid new file path',
-                    'message': 'Invalid new file path'
+                    'error': '无效的新文件路径',
+                    'message': '无效的新文件路径'
                 }), 400
 
             new_full_path = skill_folder / new_path
@@ -299,8 +359,8 @@ def update_skill_file(skill_id):
             else:
                 return jsonify({
                     'code': 400,
-                    'error': 'Cannot write content to a directory',
-                    'message': 'Cannot write content to a directory'
+                    'error': '无法向目录写入内容',
+                    'message': '无法向目录写入内容'
                 }), 400
 
         return jsonify({
@@ -310,13 +370,13 @@ def update_skill_file(skill_id):
                 'path': file_path,
                 'size': old_full_path.stat().st_size if old_full_path.is_file() else 0
             },
-            'message': 'File updated successfully'
+            'message': '文件更新成功'
         })
     except Exception as e:
         return jsonify({
             'code': 500,
-            'error': f'Failed to update file: {str(e)}',
-            'message': f'Failed to update file: {str(e)}'
+            'error': f'更新文件失败: {str(e)}',
+            'message': f'更新文件失败: {str(e)}'
         }), 500
 
 
@@ -333,33 +393,41 @@ def delete_skill_file(skill_id):
     if not skill_card:
         return jsonify({
             'code': 404,
-            'error': 'Skill not found',
-            'message': 'Skill not found'
+            'error': '技能不存在',
+            'message': '技能不存在'
         }), 404
 
     # Check if skill is published - read-only mode
     if skill_card.published:
         return jsonify({
             'code': 403,
-            'error': 'Cannot modify published skill',
-            'message': 'Published skills are read-only. Please unpublish first to delete files.'
+            'error': '无法修改已发布的技能',
+            'message': '已发布的技能为只读状态，请先取消发布后再删除文件'
         }), 403
 
     file_path = request.args.get('path', '').strip()
     if not file_path:
         return jsonify({
             'code': 400,
-            'error': 'File path is required',
-            'message': 'File path is required'
+            'error': '文件路径不能为空',
+            'message': '文件路径不能为空'
         }), 400
 
     # Security: prevent path traversal (cross-platform compatible)
     if '..' in file_path or Path(file_path).is_absolute():
         return jsonify({
             'code': 400,
-            'error': 'Invalid file path',
-            'message': 'Invalid file path'
+            'error': '无效的文件路径',
+            'message': '无效的文件路径'
         }), 400
+
+    # Protect system files - SKILL.md cannot be deleted
+    if file_path == 'SKILL.md':
+        return jsonify({
+            'code': 403,
+            'error': '无法删除系统文件',
+            'message': 'SKILL.md 是系统文件，不能删除'
+        }), 403
 
     skill_folder = get_skill_folder(skill_card.skill_code)
     full_path = skill_folder / file_path
@@ -367,8 +435,8 @@ def delete_skill_file(skill_id):
     if not full_path.exists():
         return jsonify({
             'code': 404,
-            'error': 'File not found',
-            'message': 'File not found'
+            'error': '文件不存在',
+            'message': '文件不存在'
         }), 404
 
     try:
@@ -379,17 +447,17 @@ def delete_skill_file(skill_id):
         else:
             return jsonify({
                 'code': 400,
-                'error': 'Invalid path type',
-                'message': 'Invalid path type'
+                'error': '无效的路径类型',
+                'message': '无效的路径类型'
             }), 400
 
         return jsonify({
             'code': 0,
-            'message': 'File deleted successfully'
+            'message': '文件删除成功'
         })
     except Exception as e:
         return jsonify({
             'code': 500,
-            'error': f'Failed to delete file: {str(e)}',
-            'message': f'Failed to delete file: {str(e)}'
+            'error': f'删除文件失败: {str(e)}',
+            'message': f'删除文件失败: {str(e)}'
         }), 500

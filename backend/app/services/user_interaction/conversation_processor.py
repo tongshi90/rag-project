@@ -31,6 +31,7 @@ def process_conversation(
     conversation_history: Optional[List[Dict[str, str]]] = None,
     top_k: int = 5,
     retrieval_top_k: int = 20,
+    kb_id: Optional[str] = None,
     show_progress: bool = True
 ) -> Dict[str, Any]:
     """
@@ -44,6 +45,7 @@ def process_conversation(
         conversation_history: 对话历史（可选），格式：[{"role": "user/assistant", "content": "..."}]
         top_k: 每个子问题最终返回的分片数量
         retrieval_top_k: 每个子问题初始检索的分片数量
+        kb_id: 知识库 ID（可选），指定后仅从该知识库检索
         show_progress: 是否显示处理进度
 
     Returns:
@@ -71,6 +73,8 @@ def process_conversation(
             print(f"\n{'#'*60}")
             print(f"# 开始处理用户问题")
             print(f"# 问题: {question[:50]}{'...' if len(question) > 50 else ''}")
+            if kb_id:
+                print(f"# 知识库: {kb_id}")
             print(f"{'#'*60}\n")
 
         # ============================================
@@ -123,7 +127,8 @@ def process_conversation(
         step_start = time.time()
         retrieval_pipeline = RetrievalPipeline(
             retrieval_top_k=retrieval_top_k,
-            final_top_k=top_k
+            final_top_k=top_k,
+            kb_id=kb_id  # 传递知识库 ID
         )
         all_retrieved_chunks = retrieval_pipeline.batch_retrieve(
             queries=sub_questions,

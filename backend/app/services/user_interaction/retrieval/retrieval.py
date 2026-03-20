@@ -192,7 +192,8 @@ class RetrievalPipeline:
         searcher: Optional[VectorSearcher] = None,
         reranker: Optional[Reranker] = None,
         retrieval_top_k: int = 20,
-        final_top_k: int = 5
+        final_top_k: int = 5,
+        kb_id: Optional[str] = None
     ):
         """
         初始化检索流水线
@@ -202,11 +203,13 @@ class RetrievalPipeline:
             reranker: 重排序器
             retrieval_top_k: 初始检索数量
             final_top_k: 最终返回数量
+            kb_id: 知识库 ID，用于过滤检索结果（可选）
         """
         self.searcher = searcher or VectorSearcher()
         self.reranker = reranker or Reranker()
         self.retrieval_top_k = retrieval_top_k
         self.final_top_k = final_top_k
+        self.kb_id = kb_id
 
     def retrieve(
         self,
@@ -227,11 +230,16 @@ class RetrievalPipeline:
         """
         start_time = time.time()
 
+        # 构建过滤条件
+        filter条件 = None
+        if self.kb_id:
+            filter条件 = {"kb_id": self.kb_id}
+
         # 第一步：向量检索（获取更多候选）
         if query_embedding:
-            candidates = self.searcher.search(query_embedding, top_k=self.retrieval_top_k)
+            candidates = self.searcher.search(query_embedding, top_k=self.retrieval_top_k, filter=filter条件)
         elif encoder:
-            candidates = self.searcher.search_by_text(query, encoder, top_k=self.retrieval_top_k)
+            candidates = self.searcher.search_by_text(query, encoder, top_k=self.retrieval_top_k, filter=filter条件)
         else:
             raise ValueError("必须提供 query_embedding 或 encoder")
 
@@ -241,6 +249,8 @@ class RetrievalPipeline:
         # 调试打印：最终 top_k chunks 的完整 text 信息
         print(f"\n{'='*60}")
         print(f"[最终检索结果] 传给 LLM 的 {len(final_results)} 个 chunks:")
+        if self.kb_id:
+            print(f"[知识库过滤] kb_id: {self.kb_id}")
         for i, r in enumerate(final_results, 1):
             chunk_id = r.get('chunk_id', r.get('id', 'unknown'))
             doc_id = r.get('metadata', {}).get('doc_id', 'unknown')

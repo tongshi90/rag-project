@@ -13,7 +13,7 @@ class File:
     """File model representing uploaded files"""
 
     def __init__(self, id=None, name=None, size=None, file_type=None,
-                 upload_time=None, status='completed', file_path=None):
+                 upload_time=None, status='completed', file_path=None, kb_id=None):
         self.id = id
         self.name = name
         self.size = size
@@ -21,10 +21,11 @@ class File:
         self.upload_time = upload_time
         self.status = status
         self.file_path = file_path
+        self.kb_id = kb_id
 
     def to_dict(self):
         """Convert model to dictionary"""
-        return {
+        result = {
             'id': self.id,
             'name': self.name,
             'size': self.size,
@@ -32,6 +33,9 @@ class File:
             'uploadTime': self.upload_time,
             'status': self.status,
         }
+        if self.kb_id is not None:
+            result['kbId'] = self.kb_id
+        return result
 
 
 class Database:
@@ -81,9 +85,16 @@ class Database:
                 upload_time TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'completed',
                 file_path TEXT NOT NULL,
+                kb_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+
+        # 为已存在的表添加 kb_id 列（如果不存在）
+        cursor.execute('PRAGMA table_info(files)')
+        columns = [column['name'] for column in cursor.fetchall()]
+        if 'kb_id' not in columns:
+            cursor.execute('ALTER TABLE files ADD COLUMN kb_id TEXT')
 
         conn.commit()
         conn.close()
@@ -93,38 +104,82 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute('''
-            INSERT INTO files (id, name, size, file_type, upload_time, status, file_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (file.id, file.name, file.size, file.file_type, file.upload_time, file.status, file.file_path))
+        # Check which columns exist
+        cursor.execute('PRAGMA table_info(files)')
+        columns = [column['name'] for column in cursor.fetchall()]
+        has_kb_id = 'kb_id' in columns
+
+        if has_kb_id:
+            # New version with kb_id support
+            cursor.execute('''
+                INSERT INTO files (id, name, size, file_type, upload_time, status, file_path, kb_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (file.id, file.name, file.size, file.file_type, file.upload_time, file.status, file.file_path, file.kb_id))
+        else:
+            # Oldest version without kb_id
+            cursor.execute('''
+                INSERT INTO files (id, name, size, file_type, upload_time, status, file_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (file.id, file.name, file.size, file.file_type, file.upload_time, file.status, file.file_path))
 
         conn.commit()
         conn.close()
 
-    def get_all_files(self):
-        """Get all files ordered by upload time desc"""
+    def get_all_files(self, kb_id: str = None):
+        """
+        Get all files ordered by upload time desc
+
+        Args:
+            kb_id: If provided, only return files in this knowledge base.
+        """
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute('''
-            SELECT id, name, size, file_type, upload_time, status
+        # Check which columns exist
+        cursor.execute('PRAGMA table_info(files)')
+        columns = [column['name'] for column in cursor.fetchall()]
+        has_kb_id = 'kb_id' in columns
+
+        # Build query based on available columns and filters
+        select_fields = ['id', 'name', 'size', 'file_type', 'upload_time', 'status']
+        if has_kb_id:
+            select_fields.append('kb_id')
+
+        select_clause = ', '.join(select_fields)
+        where_clauses = []
+        params = []
+
+        if kb_id is not None and has_kb_id:
+            where_clauses.append('kb_id = ?')
+            params.append(kb_id)
+
+        where_clause = 'WHERE ' + ' AND '.join(where_clauses) if where_clauses else ''
+
+        query = f'''
+            SELECT {select_clause}
             FROM files
+            {where_clause}
             ORDER BY created_at DESC
-        ''')
+        '''
+
+        cursor.execute(query, tuple(params) if params else ())
 
         rows = cursor.fetchall()
         conn.close()
 
         files = []
         for row in rows:
-            files.append({
+            file_data = {
                 'id': row['id'],
                 'name': row['name'],
                 'size': row['size'],
                 'type': row['file_type'],
                 'uploadTime': row['upload_time'],
                 'status': row['status'],
-            })
+            }
+            if has_kb_id:
+                file_data['kbId'] = row['kb_id']
+            files.append(file_data)
 
         return files
 
@@ -133,11 +188,17 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute('''
-            SELECT id, name, size, file_type, upload_time, status, file_path
-            FROM files
-            WHERE id = ?
-        ''', (file_id,))
+        # Check which columns exist
+        cursor.execute('PRAGMA table_info(files)')
+        columns = [column['name'] for column in cursor.fetchall()]
+        has_kb_id = 'kb_id' in columns
+
+        select_fields = ['id', 'name', 'size', 'file_type', 'upload_time', 'status', 'file_path']
+        if has_kb_id:
+            select_fields.append('kb_id')
+
+        query = f"SELECT {', '.join(select_fields)} FROM files WHERE id = ?"
+        cursor.execute(query, (file_id,))
 
         row = cursor.fetchone()
         conn.close()
@@ -150,7 +211,8 @@ class Database:
                 file_type=row['file_type'],
                 upload_time=row['upload_time'],
                 status=row['status'],
-                file_path=row['file_path']
+                file_path=row['file_path'],
+                kb_id=row['kb_id'] if has_kb_id else None
             )
         return None
 
@@ -187,6 +249,68 @@ class Database:
         cursor.execute('UPDATE files SET status = ? WHERE id = ?', (status, file_id))
         conn.commit()
         conn.close()
+
+    def get_files_by_kb_id(self, kb_id: str):
+        """Get files by knowledge base ID"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        # Check if kb_id column exists
+        cursor.execute('PRAGMA table_info(files)')
+        columns = [column['name'] for column in cursor.fetchall()]
+        has_kb_id = 'kb_id' in columns
+
+        if has_kb_id:
+            cursor.execute('''
+                SELECT id, name, size, file_type, upload_time, status
+                FROM files
+                WHERE kb_id = ?
+                ORDER BY created_at DESC
+            ''', (kb_id,))
+
+            rows = cursor.fetchall()
+            conn.close()
+
+            files = []
+            for row in rows:
+                file_data = {
+                    'id': row['id'],
+                    'name': row['name'],
+                    'size': row['size'],
+                    'type': row['file_type'],
+                    'uploadTime': row['upload_time'],
+                    'status': row['status'],
+                }
+                files.append(file_data)
+
+            return files
+        else:
+            conn.close()
+            return []
+
+    def delete_files_by_kb_id(self, kb_id: str):
+        """Delete all files in a knowledge base and return their IDs"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        # Check if kb_id column exists
+        cursor.execute('PRAGMA table_info(files)')
+        columns = [column['name'] for column in cursor.fetchall()]
+        has_kb_id = 'kb_id' in columns
+
+        if has_kb_id:
+            # Get file IDs before deleting
+            cursor.execute('SELECT id FROM files WHERE kb_id = ?', (kb_id,))
+            file_ids = [row[0] for row in cursor.fetchall()]
+
+            # Delete records
+            cursor.execute('DELETE FROM files WHERE kb_id = ?', (kb_id,))
+            conn.commit()
+            conn.close()
+            return file_ids
+        else:
+            conn.close()
+            return []
 
 
 # Global database instance

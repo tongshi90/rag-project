@@ -33,7 +33,7 @@
 
 .back-button:hover {
   background: #2a2a2a;
-  border-color: #4f46e5;
+  border-color: #8b5cf6;
 }
 
 .skill-info {
@@ -52,8 +52,8 @@
 
 .skill-code {
   padding: 4px 10px;
-  background: rgba(79, 70, 229, 0.15);
-  color: #4f46e5;
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
   border-radius: 6px;
   font-size: 13px;
   font-family: 'Consolas', 'Monaco', monospace;
@@ -81,7 +81,7 @@
   gap: 8px;
   padding: 8px 16px;
   border: none;
-  background: #4f46e5;
+  background: #8b5cf6;
   color: white;
   border-radius: 8px;
   font-size: 14px;
@@ -91,35 +91,93 @@
 }
 
 .add-file-button:hover {
-  background: #4338ca;
+  background: #7c3aed;
 }
 
 .file-content {
   flex: 1;
-  padding: 24px;
-  overflow: hidden;
+  padding: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* 文件列表 */
 .file-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
+  overflow-y: auto;
+  overflow-x: visible;
+  padding-bottom: 50px;
+}
+
+/* 文件树 */
+.file-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 50px;
+  max-width: 100%;
+}
+
+.tree-node {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+}
+
+.tree-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 0;
+  max-width: 100%;
+}
+
+/* 树形结构中的文件项样式调整 */
+.file-tree .file-item {
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-height: 38px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .file-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 6px;
+  padding: 8px 10px;
   background: #1a1a1a;
   border: 1px solid #333;
-  border-radius: 8px;
+  border-radius: 6px;
   transition: all 0.2s ease;
+  overflow: hidden;
+  min-height: 40px;
+  position: relative;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* 文件夹类型的样式 */
+.file-item.folder-type {
+  cursor: pointer;
+}
+
+/* 文件类型的样式 */
+.file-item.file-type {
+  cursor: default;
+}
+
+.file-item.file-type:hover {
+  cursor: pointer;
 }
 
 .file-item:hover {
-  border-color: #4f46e5;
+  border-color: #8b5cf6;
   background: #1f1f1f;
 }
 
@@ -128,35 +186,99 @@
   cursor: pointer;
 }
 
-.file-item.read-only:hover {
-  border-color: #22c55e;
-  background: #1f1f1f;
+.file-item.read-only {
+  border-color: rgba(34, 197, 94, 0.3);
 }
 
+/* 展开/折叠按钮 */
+.expand-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+  margin-right: 4px;
+}
+
+.expand-button:hover {
+  background: #2a2a2a;
+  color: #e0e0e0;
+}
+
+/* 文件占位空间，与文件夹的展开按钮对齐 */
+.expand-spacer {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+/* 文件图标 */
 .file-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #9ca3af;
   flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+}
+
+.file-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 文件图标颜色 */
+.file-item.file-type .file-icon {
+  color: #60a5fa;
+}
+
+/* 文件夹图标颜色 */
+.file-item.folder-type .file-icon {
+  color: #fbbf24;
 }
 
 .file-name {
   flex: 1;
+  min-width: 0;
   font-size: 14px;
   color: #e0e0e0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 系统文件样式 */
+.file-name.system-file {
+  color: #a78bfa;
+  font-weight: 500;
+}
+
+.system-file-icon {
+  color: #8b5cf6;
+  flex-shrink: 0;
+  opacity: 0.8;
 }
 
 .file-actions {
-  display: flex;
+  display: flex !important;
   align-items: center;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.file-item:hover .file-actions {
+  gap: 3px;
   opacity: 1;
+  transition: opacity 0.2s ease;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .file-action-button {
@@ -165,11 +287,19 @@
   justify-content: center;
   background: transparent;
   border: none;
-  color: #6b7280;
+  color: #9ca3af;
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
+  padding: 5px;
+  border-radius: 4px;
   transition: all 0.2s ease;
+  min-width: 30px;
+  min-height: 30px;
+  position: relative;
+}
+
+.file-action-button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .file-action-button:hover {
@@ -177,9 +307,55 @@
   color: #e0e0e0;
 }
 
+.file-action-button.view-button:hover {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.file-action-button.edit-button:hover {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.file-action-button.rename-button:hover {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
 .file-action-button.delete-button:hover {
-  background: #371818;
+  background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
+}
+
+.file-action-button.add-child-button:hover {
+  background: rgba(139, 92, 246, 0.2);
+  color: #8b5cf6;
+}
+
+/* 自定义 Tooltip */
+.custom-tooltip {
+  padding: 6px 12px;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  font-size: 12px;
+  white-space: nowrap;
+  border-radius: 4px;
+  border: 1px solid #333;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 99999;
+  animation: tooltip-fade-in 0.1s ease;
+}
+
+@keyframes tooltip-fade-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 /* 加载状态 */
@@ -196,7 +372,7 @@
   width: 40px;
   height: 40px;
   border: 3px solid #333;
-  border-top-color: #4f46e5;
+  border-top-color: #8b5cf6;
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 16px;
@@ -230,7 +406,7 @@
 
 .retry-button {
   padding: 8px 16px;
-  background: #4f46e5;
+  background: #8b5cf6;
   border: none;
   border-radius: 8px;
   color: white;
@@ -241,7 +417,7 @@
 }
 
 .retry-button:hover {
-  background: #4338ca;
+  background: #7c3aed;
 }
 
 /* 空状态 */
@@ -252,7 +428,7 @@
 }
 
 .empty-icon {
-  color: #4f46e5;
+  color: #8b5cf6;
   margin-bottom: 24px;
   display: flex;
   justify-content: center;
@@ -349,6 +525,10 @@
 
 /* 表单样式 */
 .form-group {
+  margin-bottom: 16px;
+}
+
+.form-group:last-child {
   margin-bottom: 0;
 }
 
@@ -382,12 +562,61 @@
 
 .form-input:focus {
   outline: none;
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
 .form-input::placeholder {
   color: #6b7280;
+}
+
+/* 父路径显示 */
+.parent-path-display {
+  padding: 10px 12px;
+  background: #242424;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #9ca3af;
+  font-size: 13px;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* 类型选择器 */
+.type-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.type-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid #333;
+  background: #242424;
+  color: #9ca3af;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.type-option:hover {
+  background: #2a2a2a;
+  border-color: #8b5cf6;
+}
+
+.type-option.active {
+  background: #8b5cf6;
+  border-color: #8b5cf6;
+  color: white;
+}
+
+.type-option.active svg {
+  color: white;
 }
 
 /* 文件编辑器 */
@@ -408,8 +637,8 @@
 
 .file-editor:focus {
   outline: none;
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
 /* 文件查看器（只读模式） */
@@ -430,21 +659,6 @@
   word-wrap: break-word;
   box-sizing: border-box;
   margin: 0;
-}
-
-/* 查看提示图标 */
-.view-hint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #22c55e;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.file-item.read-only:hover .view-hint {
-  opacity: 1;
 }
 
 .modal-button {
@@ -473,12 +687,12 @@
 }
 
 .modal-button-primary {
-  background: #4f46e5;
+  background: #8b5cf6;
   color: white;
 }
 
 .modal-button-primary:hover:not(:disabled) {
-  background: #4338ca;
+  background: #7c3aed;
 }
 
 /* 响应式 */
