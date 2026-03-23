@@ -110,7 +110,7 @@ export const SkillListPage: React.FC<SkillListPageProps> = ({ onBackToHome: _onB
 
         // 自动创建 SKILL.md 文件
         try {
-          await apiService.createSkillFile(createdSkill.id, 'SKILL.md', '# ' + createdSkill.title + '\n\n' + createdSkill.description, false);
+          await apiService.createSkillFile(createdSkill.id, 'SKILL.md', '', false);
         } catch (err) {
           console.error('Failed to create SKILL.md:', err);
         }
