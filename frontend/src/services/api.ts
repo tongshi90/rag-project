@@ -15,17 +15,7 @@ import type {
   RetrievalTestHistoryListResponse,
   FileChunkListResponse
 } from '../types';
-
-// 获取API基础URL
-const getApiBaseUrl = (): string => {
-  const envBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  if (!envBaseUrl || envBaseUrl === '{{API_BASE_URL}}') {
-    return 'http://127.0.0.1:5000';
-  }
-  return envBaseUrl;
-};
-
-const API_BASE_URL = getApiBaseUrl();
+import { API_BASE_URL } from '../config';
 
 // 工具函数：格式化文件大小
 export const formatFileSize = (bytes: number): string => {
@@ -64,7 +54,7 @@ export interface ApiService {
   createKnowledgeBase: (request: KnowledgeBaseCreateRequest) => Promise<ApiResponse<KnowledgeBase>>;
   updateKnowledgeBase: (kbId: string, request: KnowledgeBaseUpdateRequest) => Promise<ApiResponse<KnowledgeBase>>;
   deleteKnowledgeBase: (kbId: string) => Promise<ApiResponse<void>>;
-  getKnowledgeBaseFiles: (kbId: string) => Promise<ApiResponse<FileListListResponse>>;
+  getKnowledgeBaseFiles: (kbId: string, page?: number, pageSize?: number) => Promise<ApiResponse<FileListListResponse>>;
   uploadToKnowledgeBase: (kbId: string, file: File) => Promise<ApiResponse<FileInfo>>;
   deleteKnowledgeBaseFile: (kbId: string, fileId: string) => Promise<ApiResponse<void>>;
   deleteAllKnowledgeBaseFiles: (kbId: string) => Promise<ApiResponse<{ deletedCount: number }>>;
@@ -74,6 +64,7 @@ export interface ApiService {
   addRetrievalTestHistory: (kbId: string, query: string) => Promise<ApiResponse<RetrievalTestHistory>>;
   deleteRetrievalTestHistory: (historyId: string) => Promise<ApiResponse<void>>;
   clearRetrievalTestHistory: (kbId: string) => Promise<ApiResponse<{ deletedCount: number }>>;
+  clearKnowledgeData: () => Promise<ApiResponse<{ cleared: string[]; errors: string[] }>>;
 }
 
 // 真实API服务
@@ -243,8 +234,8 @@ export const apiService: ApiService = {
     return response.json();
   },
 
-  getKnowledgeBaseFiles: async (kbId) => {
-    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}/files`);
+  getKnowledgeBaseFiles: async (kbId, page = 1, pageSize = 10) => {
+    const response = await fetch(`${API_BASE_URL}/api/knowledge-bases/${kbId}/files?page=${page}&pageSize=${pageSize}`);
     return response.json();
   },
 
@@ -302,6 +293,13 @@ export const apiService: ApiService = {
   clearRetrievalTestHistory: async (kbId) => {
     const response = await fetch(`${API_BASE_URL}/api/retrieval-test-history/${kbId}/all`, {
       method: 'DELETE',
+    });
+    return response.json();
+  },
+
+  clearKnowledgeData: async () => {
+    const response = await fetch(`${API_BASE_URL}/api/files/clear-knowledge`, {
+      method: 'POST',
     });
     return response.json();
   },

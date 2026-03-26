@@ -21,9 +21,11 @@ from .text_splitter import (
     refine_title_patterns,
     split_chunks,
     post_process_chunks,
-    extract_keywords,
-    RAW_TITLE_PATTERNS
+    extract_keywords
 )
+
+# 导入 TitleDetector
+from .chapter_breakdown import TitleDetector
 
 
 def extract_paragraphs_from_word(word_path: str) -> List[Dict]:
@@ -74,7 +76,7 @@ def extract_paragraphs_from_word(word_path: str) -> List[Dict]:
     return lines
 
 
-def refine_title_patterns_for_word(lines: List[Dict]) -> List:
+def refine_title_patterns_for_word(lines: List[Dict]) -> Tuple[List, Dict]:
     """
     Word 文档的标题规则优化
 
@@ -84,7 +86,7 @@ def refine_title_patterns_for_word(lines: List[Dict]) -> List:
         lines: 文本行列表
 
     Returns:
-        标题正则规则列表
+        (标题树列表, 目录信息)
     """
     # 首先检查 Word 内置标题样式的使用情况
     heading_styles = set()
@@ -97,11 +99,11 @@ def refine_title_patterns_for_word(lines: List[Dict]) -> List:
     # 这里为了简化，我们仍然使用文本模式匹配（兼容性更好）
     # 但可以优先检查带有标题样式的段落
 
-    # 使用与 PDF 相同的标题检测逻辑
+    # 使用与 PDF 相同的标题检测逻辑（使用TitleDetector）
     return refine_title_patterns(lines)
 
 
-def split_word_to_chunks(word_path: str, file_id: str = None, kb_id: str = None) -> tuple[List[Dict], List]:
+def split_word_to_chunks(word_path: str, file_id: str = None, kb_id: str = None) -> tuple[List[Dict], Dict]:
     """
     从 Word 文件直接生成 chunks
 
@@ -117,24 +119,31 @@ def split_word_to_chunks(word_path: str, file_id: str = None, kb_id: str = None)
         kb_id: 知识库 ID（可选）
 
     Returns:
-        (chunks, title_patterns): 分片列表和标题正则规则
+        (chunks, result_info): 分片列表和结果信息
+        result_info包含: {"title_tree": 标题树, "toc_info": 目录信息, "title_patterns": []}
     """
     # 第一步：提取段落
     lines = extract_paragraphs_from_word(word_path)
 
     if not lines:
-        return [], []
+        return [], {}
 
-    # 第二步：标题规则优化
-    title_patterns = refine_title_patterns_for_word(lines)
+    # 第二步：标题规则优化（返回标题树和目录信息）
+    title_tree, toc_info = refine_title_patterns_for_word(lines)
 
     # 第三步：按标题分片
-    chunks = split_chunks(lines, title_patterns)
+    chunks = split_chunks(lines, title_tree, toc_info)
 
     # 第四步：后处理
     chunks = post_process_chunks(chunks, file_id, kb_id)
 
-    return chunks, title_patterns
+    result_info = {
+        "title_tree": title_tree,
+        "toc_info": toc_info,
+        "title_patterns": []  # 空列表，表示不使用旧的验证方式
+    }
+
+    return chunks, result_info
 
 
 def is_word_file(file_path: str) -> bool:

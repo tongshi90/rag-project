@@ -33,10 +33,13 @@ handling_mode 说明：
 
 import hashlib
 import re
+import logging
 from typing import List, Dict, Optional
 
 import numpy as np
 import tiktoken
+
+logger = logging.getLogger(__name__)
 
 try:
     from app.config.model_config import get_embedding_model
@@ -65,7 +68,7 @@ def _get_embedding_model():
         try:
             _embedding_model = get_embedding_model()
         except Exception as e:
-            print(f"警告: 无法初始化 Embedding 模型: {e}")
+            logger.warning(f"无法初始化 Embedding 模型: {e}")
             _embedding_model = None
     return _embedding_model
 
@@ -98,7 +101,7 @@ def get_embedding(text: str, use_cache: bool = True) -> Optional[np.ndarray]:
                 _embedding_cache[text_hash] = vec
             return vec
     except Exception as e:
-        print(f"Embedding 调用失败: {e}")
+        logger.error(f"Embedding 调用失败: {e}")
 
     return None
 
@@ -289,48 +292,49 @@ def validate_chunk_too_long(chunks: List[Dict], metrics: Dict) -> None:
 
 def validate_content_length(chunks: List[Dict], metrics: Dict) -> None:
     """
-    校验正文长度是否足够（合并了正文存在性和标题占比检查）
+    校验正文长度是否足够（使用纯正文长度校验）
 
     目的：确保正文长度足够作为一个独立的chunk分片，方便后续embedding使用
 
-    规则如下（综合正文长度和标题占比）：
-        1、如果无正文(正文长度为0)，得分为20分
-        2、如果标题占比 > 80%（正文极少），得分为15分
-        3、如果正文长度 < 0.5 * 阈值 或 标题占比 > 60%，得分为15分
-        4、如果正文长度 < 阈值 或 标题占比 > 40%，得分为10分
+    规则如下（只看正文长度）：
+        1、正文长度为0 → 风险60分，强制异常
+        2、正文长度 ≤ 20 → 风险40分
+        3、正文长度 < 100 → 风险15分
+        4、正文长度 < 200 → 风险10分
+
+    短文档处理：
+        - 跳过 < 100 和 < 200 的判断
+        - 正文长度为 0 和 ≤ 20 还是要正常判断
 
     Args:
         chunks: 分片列表（会直接修改）
         metrics: 前置统计指标
     """
-    # 短文档跳过正文长度校验
-    if metrics.get('doc_is_short', False):
-        return
-
     chunk_details = metrics.get('chunk_details', [])
-    # 最小正文阈值
-    min_content_threshold = 200
 
     for chunk_order, chunk_item in enumerate(chunks):
-        # 从metrics中获取正文token长度和标题占比
+        # 从metrics中获取正文token长度
         content_len = chunk_details[chunk_order].get('content_len', 0)
-        title_proportion = chunk_details[chunk_order].get('title_proportion', 0)
 
         if 'error_info' not in chunk_item:
             chunk_item['error_info'] = []
         # 初始化risk_score
         if 'total_risk_score' not in chunk_item:
             chunk_item['total_risk_score'] = 0
-        risk_score = None
 
-        # 综合判断正文长度和标题占比
+        risk_score = None
+        hard_violation = False
+
+        # 只检查正文长度
         if content_len == 0:
-            risk_score = 20
-        elif title_proportion > 0.8:
+            risk_score = 60
+            hard_violation = True
+        elif content_len <= 20:
+            risk_score = 40
+        # 短文档跳过 < 100 和 < 200 的判断
+        elif not metrics.get('doc_is_short', False) and content_len < 100:
             risk_score = 15
-        elif content_len < min_content_threshold * 0.5 or title_proportion > 0.6:
-            risk_score = 15
-        elif content_len < min_content_threshold or title_proportion > 0.4:
+        elif not metrics.get('doc_is_short', False) and content_len < 200:
             risk_score = 10
 
         # 如果有异常，添加到error_info列表并累加risk_score
@@ -341,6 +345,8 @@ def validate_content_length(chunks: List[Dict], metrics: Dict) -> None:
                 'handling_mode': 'merge'
             })
             chunk_item['total_risk_score'] += risk_score
+            if hard_violation:
+                chunk_item['hard_violation'] = True
 
 
 def validate_parameter_mixing(chunks: List[Dict]) -> None:
@@ -697,6 +703,131 @@ def validate_continuous_short_chunk_same_topic(chunks: List[Dict]) -> None:
 
 
 # ============================================
+# 短 Chunk 合并处理
+# ============================================
+
+def merge_short_chunks(chunks: List[Dict], min_content_tokens: int = 20) -> List[Dict]:
+    """
+    合并正文内容过短的 chunk
+
+    逻辑：
+        1. 如果某个 chunk 的正文长度 <= min_content_tokens，则认为无法独立作为知识库存在
+        2. 将短 chunk 与相邻 chunk 合并：
+           - 如果不是最后一个 chunk，与下一个 chunk 合并
+           - 如果是最后一个 chunk，与前一个 chunk 合并
+        3. 合并后使用被合并的那个 chunk 的 title 和 title_path
+
+    Args:
+        chunks: 分片列表
+        min_content_tokens: 最小正文 token 数阈值，默认 20
+
+    Returns:
+        合并后的分片列表
+    """
+    if not chunks:
+        return chunks
+
+    # 获取前置统计信息
+    metrics = calculate_pre_validation_metrics(chunks)
+    chunk_details = metrics.get('chunk_details', [])
+
+    # 找出需要合并的短 chunk 索引
+    short_indices = []
+    for idx, detail in enumerate(chunk_details):
+        content_len = detail.get('content_len', 0)
+        if content_len <= min_content_tokens:
+            short_indices.append(idx)
+
+    if not short_indices:
+        return chunks
+
+    # 从后向前处理，避免索引变化问题
+    # 但由于合并逻辑是"与下一个合并"，我们需要从前往后处理
+    merged_chunks = []
+    skip_indices = set()
+    n = len(chunks)
+
+    for idx in range(n):
+        if idx in skip_indices:
+            continue
+
+        chunk = chunks[idx]
+        content_len = chunk_details[idx].get('content_len', 0)
+
+        # 如果是短 chunk
+        if content_len <= min_content_tokens:
+            # 判断是否是最后一个
+            if idx == n - 1:
+                # 最后一个，与前一个合并
+                if idx > 0 and merged_chunks:
+                    # 找到前一个有效的 chunk（可能已经被合并过）
+                    prev_chunk = merged_chunks[-1]
+
+                    # 合并文本
+                    merged_text = prev_chunk.get('text', '') + '\n' + chunk.get('text', '')
+
+                    # 更新前一个 chunk
+                    prev_chunk['text'] = merged_text
+                    prev_chunk['length'] = len(merged_text)
+
+                    # 保持前一个 chunk 的 title 和 title_path
+                    # 不需要改变
+
+                    # 当前 chunk 被合并，跳过
+                    skip_indices.add(idx)
+                else:
+                    # 只有一个 chunk 且是短 chunk，无法合并，保留原样
+                    merged_chunks.append(chunk)
+            else:
+                # 不是最后一个，与下一个合并
+                next_idx = idx + 1
+                while next_idx in skip_indices and next_idx < n - 1:
+                    next_idx += 1
+
+                if next_idx < n:
+                    next_chunk = chunks[next_idx]
+
+                    # 合并文本：当前短 chunk + 下一个 chunk
+                    merged_text = chunk.get('text', '') + '\n' + next_chunk.get('text', '')
+
+                    # 使用下一个 chunk 的 title 和 title_path
+                    merged_chunk = {
+                        'chunk_id': next_chunk.get('chunk_id', ''),
+                        'order': next_chunk.get('order', idx),
+                        'doc_id': next_chunk.get('doc_id', ''),
+                        'title': next_chunk.get('title', ''),
+                        'title_path': next_chunk.get('title_path', []),
+                        'text': merged_text,
+                        'page': chunk.get('page', next_chunk.get('page', '')),
+                        'type': next_chunk.get('type', 'text'),
+                        'length': len(merged_text),
+                        'keywords': next_chunk.get('keywords', [])
+                    }
+
+                    # 添加到结果列表
+                    merged_chunks.append(merged_chunk)
+
+                    # 标记当前和下一个都被处理了
+                    skip_indices.add(idx)
+                    skip_indices.add(next_idx)
+                else:
+                    # 没有下一个可以合并，保留原样
+                    merged_chunks.append(chunk)
+        else:
+            # 不是短 chunk，直接添加
+            merged_chunks.append(chunk)
+
+    # 重新设置 order
+    for new_idx, chunk in enumerate(merged_chunks):
+        chunk['order'] = new_idx + 1
+        # 重新生成 chunk_id（基于新的 order）
+        doc_id = chunk.get('doc_id', '')
+        chunk['chunk_id'] = f"{doc_id}_{new_idx + 1}"
+
+    return merged_chunks
+
+
+# ============================================
 # 主入口函数
 # ============================================
 
@@ -757,7 +888,7 @@ def validate_chunks(chunks: List[Dict], title_patterns: Optional[List[tuple]] = 
 
 def get_validation_summary(chunks: List[Dict]) -> Dict:
     """
-    获取校验结果摘要
+    获取校验结果摘要（并打印详细的异常检测日志）
 
     Args:
         chunks: 校验后的分片列表
@@ -775,23 +906,44 @@ def get_validation_summary(chunks: List[Dict]) -> Dict:
     with_hard_violation = 0
     total_risk = 0
     high_risk = []
+    error_chunks_detail = []
 
-    for chunk in chunks:
+    # 异常类型中文映射
+    ERROR_TYPE_NAMES = {
+        'validate_chunk_too_short': '分片过短',
+        'validate_chunk_too_long': '分片过长',
+        'validate_content_length': '正文长度不足',
+        'validate_parameter_mixing': '参数混杂',
+        'validate_title_structure': '标题结构混乱',
+        'validate_long_chunk_multi_topic': '多主题混杂',
+        'validate_continuous_short_chunk_same_topic': '连续短chunk同知识点'
+    }
+
+    logger.debug(f"开始 Chunk 异常检测详情，总分片数: {len(chunks)}")
+
+    for idx, chunk in enumerate(chunks):
         total_risk_score = chunk.get('total_risk_score', 0)
         total_risk += total_risk_score
 
         if total_risk_score > 0:
             with_errors += 1
+            chunk_id = chunk.get('chunk_id', f'chunk_{idx+1}')
+            error_info = chunk.get('error_info', [])
 
-        if chunk.get('hard_violation', False):
-            with_hard_violation += 1
+            if chunk.get('hard_violation', False):
+                with_hard_violation += 1
 
-        if total_risk_score >= 40:
-            high_risk.append({
-                'chunk_id': chunk.get('chunk_id'),
-                'total_risk_score': total_risk_score,
-                'error_types': [e.get('type') for e in chunk.get('error_info', [])]
-            })
+            # 记录高风险chunk
+            if total_risk_score >= 40:
+                high_risk.append({
+                    'chunk_id': chunk.get('chunk_id'),
+                    'total_risk_score': total_risk_score,
+                    'error_types': [e.get('type') for e in error_info]
+                })
+
+    logger.info(f"异常检测统计 - 总分片数: {total}, 异常分片数: {with_errors}, "
+               f"强制异常数: {with_hard_violation}, 总风险分数: {total_risk}, "
+               f"高风险分片数 (>=40分): {len(high_risk)}")
 
     return {
         'total_chunks': total,
@@ -802,7 +954,7 @@ def get_validation_summary(chunks: List[Dict]) -> Dict:
     }
 
 
-def get_risk_chunk_ids(chunks: List[Dict], min_risk_score: int = 60) -> List[Dict[str, str]]:
+def get_risk_chunk_ids(chunks: List[Dict], min_risk_score: int = 40) -> List[Dict[str, str]]:
     """
     获取风险分数达到阈值或有强制异常的分片信息列表
 

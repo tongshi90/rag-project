@@ -5,10 +5,13 @@
 """
 import json
 import re
+import logging
 from typing import List, Dict, Any, Optional, Set
 
 from app.config.model_config import get_text_splitter_llm
 from app.services.document_processing.graph_builder import get_graph_builder
+
+logger = logging.getLogger(__name__)
 
 
 class QueryEntityRecognizer:
@@ -157,10 +160,10 @@ class QueryEntityRecognizer:
             return valid_entities
 
         except json.JSONDecodeError as e:
-            print(f"JSON 解析失败: {e}")
+            logger.error(f"[实体识别] JSON 解析失败: {e}")
             return []
         except Exception as e:
-            print(f"解析实体响应失败: {e}")
+            logger.error(f"[实体识别] 解析实体响应失败: {e}")
             return []
 
     def recognize_entities(
@@ -217,7 +220,7 @@ class QueryEntityRecognizer:
             return entities
 
         except Exception as e:
-            print(f"实体识别失败: {e}")
+            logger.error(f"[实体识别] 实体识别失败: {e}")
             return []
 
     def get_entity_ids(

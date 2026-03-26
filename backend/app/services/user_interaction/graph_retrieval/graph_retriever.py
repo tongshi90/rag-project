@@ -251,3 +251,9 @@ def get_graph_retriever() -> GraphRetriever:
     if _graph_retriever_instance is None:
         _graph_retriever_instance = GraphRetriever()
     return _graph_retriever_instance
+
+
+def reset_graph_retriever():
+    """重置图谱检索器实例（用于清理数据）"""
+    global _graph_retriever_instance
+    _graph_retriever_instance = None

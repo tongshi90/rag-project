@@ -56,6 +56,9 @@ export interface ApiResponse<T> {
 export interface FileListListResponse {
   files: FileInfo[];
   total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 // 技能卡片类型
@@ -128,11 +131,9 @@ export interface RetrievableChunk {
   rerankScore: number;
   metadata: {
     docId: string;
+    docName: string;
     page: number;
     order: number;
-    type: string;
-    length: number;
-    bbox?: string;
   };
 }
 
@@ -169,6 +170,7 @@ export interface FileChunk {
   page: number;
   type: string;
   length: number;
+  titlePath: string[];  // 标题路径，如 ["第一章 概述", "一、背景"]
 }
 
 // Chunk 列表响应

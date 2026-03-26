@@ -201,6 +201,18 @@ class KnowledgeBaseDatabase:
         conn.close()
         return count
 
+    def delete_all(self):
+        """Delete all knowledge bases"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('DELETE FROM knowledge_bases')
+        count = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        return count
+
 
 # Global database instance
 knowledge_base_db = KnowledgeBaseDatabase()

@@ -108,3 +108,9 @@ def encode_queries(queries: List[str]) -> List[List[float]]:
     """批量编码问题的便捷函数"""
     encoder = get_query_encoder()
     return encoder.encode_queries(queries)
+
+
+def reset_query_encoder():
+    """重置查询编码器实例（用于清理数据）"""
+    global _query_encoder_instance
+    _query_encoder_instance = None

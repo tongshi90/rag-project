@@ -126,7 +126,14 @@
 .kb-file-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 20px 20px;
+  padding: 0 20px;
+}
+
+.kb-file-list-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .kb-file-list::-webkit-scrollbar {

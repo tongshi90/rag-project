@@ -3,9 +3,12 @@ Retrieval Test API Routes
 
 提供召回测试功能，用于测试检索效果，不调用LLM生成答案。
 """
+import logging
 from flask import request, jsonify
 
 from app.api import api_bp
+
+logger = logging.getLogger(__name__)
 
 # Note: The following imports depend on chromadb which requires sqlite3 >= 3.35.0
 # We import them lazily in the functions that use them to avoid import errors:
@@ -143,22 +146,44 @@ def retrieval_test():
             )
             final_results = pipeline.retrieve(query, query_embedding)
 
+        # 获取文档名映射
+        from app.models.file import db
+        doc_ids = set()
+        for result in final_results:
+            metadata = result.get('metadata', {})
+            doc_id = metadata.get('doc_id', '')
+            if doc_id:
+                doc_ids.add(doc_id)
+
+        doc_name_map = {}
+        for doc_id in doc_ids:
+            try:
+                file = db.get_file_by_id(doc_id)
+                if file:
+                    # File 对象的 name 属性
+                    doc_name = file.name if file.name else f"文件_{doc_id}"
+                    doc_name_map[doc_id] = doc_name
+                else:
+                    doc_name_map[doc_id] = f"未知文件_{doc_id}"
+            except Exception as e:
+                logger.error(f"获取文档 {doc_id} 名称失败: {e}", exc_info=True)
+                doc_name_map[doc_id] = f"错误_{doc_id}"
+
         # 格式化结果
         formatted_chunks = []
         for result in final_results:
             metadata = result.get('metadata', {})
+            doc_id = metadata.get('doc_id', '')
             formatted_chunk = {
                 'chunkId': result.get('chunk_id', ''),
                 'text': result.get('text', ''),
                 'score': result.get('score', 0),
                 'rerankScore': result.get('rerank_score', result.get('score', 0)),
                 'metadata': {
-                    'docId': metadata.get('doc_id', ''),
+                    'docId': doc_id,
+                    'docName': doc_name_map.get(doc_id, ''),
                     'page': metadata.get('page', 0),
-                    'order': metadata.get('order', 0),
-                    'type': metadata.get('type', ''),
-                    'length': metadata.get('length', 0),
-                    'bbox': metadata.get('bbox')
+                    'order': metadata.get('order', 0)
                 }
             }
             formatted_chunks.append(formatted_chunk)

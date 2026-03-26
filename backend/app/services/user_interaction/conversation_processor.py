@@ -3,27 +3,29 @@
 
 整合用户交互的步骤：
 1. 问题拆分 (Question Splitter) - 复杂问题 → 子问题列表
-2. 实体识别 (Entity Recognizer) - 识别问题中的实体
-3. 问题向量化 (Query Encoder) - 子问题 → 向量表示
-4. 检索和重排序 (Retrieval) - 混合检索（向量+关键字+图谱）→ Top K 分片
-5. 答案生成 (Generator) - 问题 + 分片 → LLM 答案
+2. 问题向量化 (Query Encoder) - 子问题 → 向量表示
+3. 检索和重排序 (Retrieval) - 向量检索 → Top K 分片
+4. 答案生成 (Generator) - 问题 + 分片 → LLM 答案
 
 使用方式：
     from app.services.user_interaction import process_conversation
 
     result = process_conversation(user_question, conversation_history)
-    result = process_conversation_hybrid(user_question, conversation_history, doc_id="xxx")
 """
 
 import time
+import logging
 from typing import Dict, Any, List, Optional
 
 from .question_splitter import split_question
 from .query_encoder import get_query_encoder
-from .retrieval import RetrievalPipeline, HybridRetrievalPipeline
+from .retrieval import RetrievalPipeline
 from .generator import AnswerGenerator
-from .entity_recognizer import QueryEntityRecognizer
+from .intent_recognition import predict_knowledge_base
 from app.config.model_config import get_chat_model
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 def process_conversation(
@@ -69,61 +71,27 @@ def process_conversation(
     }
 
     try:
-        if show_progress:
-            print(f"\n{'#'*60}")
-            print(f"# 开始处理用户问题")
-            print(f"# 问题: {question[:50]}{'...' if len(question) > 50 else ''}")
-            if kb_id:
-                print(f"# 知识库: {kb_id}")
-            print(f"{'#'*60}\n")
-
         # ============================================
         # 第一步：问题拆分
         # ============================================
-        if show_progress:
-            print(f"\n{'='*60}")
-            print(f"第一步: 问题拆分")
-            print(f"{'='*60}")
-
         step_start = time.time()
         chat_model = get_chat_model()
         sub_questions = split_question(question, chat_model, temperature=0.1)
         step_elapsed = time.time() - step_start
-
-        if show_progress:
-            print(f"拆分完成: {len(sub_questions)} 个子问题")
-            for i, sq in enumerate(sub_questions, 1):
-                print(f"  - 子问题 {i}: {sq}")
-            print(f"耗时: {step_elapsed:.2f} 秒")
 
         result['sub_questions'] = sub_questions
 
         # ============================================
         # 第二步：问题向量化
         # ============================================
-        if show_progress:
-            print(f"\n{'='*60}")
-            print(f"第二步: 问题向量化")
-            print(f"{'='*60}")
-
         step_start = time.time()
         encoder = get_query_encoder()
         query_embeddings = encoder.encode_queries(sub_questions)
         step_elapsed = time.time() - step_start
 
-        if show_progress:
-            print(f"向量化完成: {len(query_embeddings)} 个向量")
-            print(f"向量维度: {len(query_embeddings[0]) if query_embeddings else 'N/A'}")
-            print(f"耗时: {step_elapsed:.2f} 秒")
-
         # ============================================
         # 第三步：检索和重排序
         # ============================================
-        if show_progress:
-            print(f"\n{'='*60}")
-            print(f"第三步: 检索和重排序")
-            print(f"{'='*60}")
-
         step_start = time.time()
         retrieval_pipeline = RetrievalPipeline(
             retrieval_top_k=retrieval_top_k,
@@ -137,25 +105,30 @@ def process_conversation(
         )
         step_elapsed = time.time() - step_start
 
-        # 统计检索结果
-        total_chunks = sum(len(chunks) for chunks in all_retrieved_chunks)
-
-        if show_progress:
-            print(f"检索完成: 共 {total_chunks} 个分片")
-            for i, chunks in enumerate(all_retrieved_chunks, 1):
-                print(f"  - 子问题 {i}: {len(chunks)} 个分片")
-            print(f"耗时: {step_elapsed:.2f} 秒")
-
         result['retrieved_chunks'] = all_retrieved_chunks
 
         # ============================================
-        # 第四步：答案生成
+        # 第四步：Chunk 过滤（低分过滤）
         # ============================================
-        if show_progress:
-            print(f"\n{'='*60}")
-            print(f"第四步: 答案生成 (LLM)")
-            print(f"{'='*60}")
+        CHUNK_SCORE_THRESHOLD = 0.3  # chunk 分数阈值
 
+        step_start = time.time()
+        filtered_chunks = []
+        filtered_count = 0
+
+        for chunks in all_retrieved_chunks:
+            filtered = [c for c in chunks if c.get('rerank_score', 0) >= CHUNK_SCORE_THRESHOLD]
+            filtered_chunks.append(filtered)
+            filtered_count += len(chunks) - len(filtered)
+
+        step_elapsed = time.time() - step_start
+
+        # 更新为过滤后的 chunks
+        all_retrieved_chunks = filtered_chunks
+
+        # ============================================
+        # 第五步：答案生成
+        # ============================================
         step_start = time.time()
         generator = AnswerGenerator()
 
@@ -176,10 +149,6 @@ def process_conversation(
 
         step_elapsed = time.time() - step_start
 
-        if show_progress:
-            print(f"答案生成完成")
-            print(f"耗时: {step_elapsed:.2f} 秒")
-
         result['answer'] = answer
 
         # ============================================
@@ -188,11 +157,7 @@ def process_conversation(
         result['success'] = True
         result['total_elapsed'] = time.time() - start_time
 
-        if show_progress:
-            print(f"\n{'#'*60}")
-            print(f"# 用户问题处理完成！")
-            print(f"# 总耗时: {result['total_elapsed']:.2f} 秒")
-            print(f"{'#'*60}\n")
+        logger.info(f"对话处理完成: 耗时: {result['total_elapsed']:.2f}s, 检索到 {sum(len(c) for c in all_retrieved_chunks)} 个 chunks")
 
         return result
 
@@ -200,10 +165,7 @@ def process_conversation(
         result['error'] = str(e)
         result['total_elapsed'] = time.time() - start_time
 
-        if show_progress:
-            print(f"\n{'!'*60}")
-            print(f"! 问题处理失败: {str(e)}")
-            print(f"{'!'*60}\n")
+        logger.error(f"[对话处理失败] 问题处理失败: {str(e)}, 耗时: {result['total_elapsed']:.2f}s", exc_info=True)
 
         raise
 
@@ -243,203 +205,137 @@ def chat(question: str, conversation_history: Optional[List[Dict[str, str]]] = N
     return process_conversation(question, conversation_history, show_progress=True)
 
 
-def process_conversation_hybrid(
+# ============================================
+# 智能两阶段召回
+# ============================================
+
+RERANK_SCORE_THRESHOLD = 0.6  # rerank 分数阈值
+
+
+def process_conversation_with_intent(
     question: str,
-    doc_id: str,
     conversation_history: Optional[List[Dict[str, str]]] = None,
     top_k: int = 5,
     retrieval_top_k: int = 20,
-    show_progress: bool = True,
-    enable_vector: bool = True,
-    enable_keyword: bool = True,
-    enable_graph: bool = True,
-    weights: Optional[Dict[str, float]] = None
+    kb_id: Optional[str] = None,
+    show_progress: bool = True
 ) -> Dict[str, Any]:
     """
-    使用混合检索的完整对话处理流程
+    智能两阶段召回的对话处理流程
 
-    处理流程：
-        1. 问题拆分 → 2. 实体识别 → 3. 问题向量化 → 4. 混合检索 → 5. 答案生成
+    流程：
+    1. 如果用户指定了 kb_id，直接查询
+    2. 如果用户未指定 kb_id：
+       a. 使用 LLM 进行意图识别，预测最相关的知识库
+       b. 进行第一次定向召回
+       c. 检查最高 rerank_score：
+          - 如果 >= 0.6：使用当前结果生成答案
+          - 如果 < 0.6：进行第二次全局召回
 
     Args:
         question: 用户问题
-        doc_id: 文档 ID（用于加载图谱和索引）
         conversation_history: 对话历史（可选）
-        top_k: 最终返回的分片数量
-        retrieval_top_k: 初始检索的分片数量
+        top_k: 每个子问题最终返回的分片数量
+        retrieval_top_k: 每个子问题初始检索的分片数量
+        kb_id: 知识库 ID（可选），如果指定则跳过意图识别
         show_progress: 是否显示处理进度
-        enable_vector: 是否启用向量检索
-        enable_keyword: 是否启用关键字检索
-        enable_graph: 是否启用图谱检索
-        weights: 各检索方法的权重配置
 
     Returns:
         处理结果，包含：
             - success: 是否成功
             - answer: 生成的答案
-            - sub_questions: 子问题列表
-            - recognized_entities: 识别的实体
+            - kb_id: 最终使用的知识库 ID（可能为 None 表示全库）
             - retrieved_chunks: 检索到的分片数据
             - total_elapsed: 总耗时
+            - stages: 召回阶段信息
     """
     start_time = time.time()
 
     result = {
         "success": False,
         "answer": "",
-        "sub_questions": [],
-        "recognized_entities": [],
+        "kb_id": kb_id,
         "retrieved_chunks": [],
         "total_elapsed": 0,
+        "stages": {
+            "intent_recognition": None,
+            "first_retrieval": None,
+            "second_retrieval": None
+        },
         "error": None
     }
 
     try:
-        if show_progress:
-            print(f"\n{'#'*60}")
-            print(f"# 开始处理用户问题（混合检索）")
-            print(f"# 问题: {question[:50]}{'...' if len(question) > 50 else ''}")
-            print(f"# 文档 ID: {doc_id}")
-            print(f"{'#'*60}\n")
+        # ============================================
+        # 阶段0：意图识别（仅当未指定 kb_id 时）
+        # ============================================
+        predicted_kb_id = kb_id
+        if kb_id is None:
+            step_start = time.time()
+            predicted_kb_id = predict_knowledge_base(question)
+            step_elapsed = time.time() - step_start
+
+            result['stages']['intent_recognition'] = {
+                'predicted_kb_id': predicted_kb_id,
+                'elapsed': step_elapsed
+            }
+
+            # 使用预测的 kb_id（可能为 None）
+            result['kb_id'] = predicted_kb_id
 
         # ============================================
-        # 第一步：问题拆分
+        # 阶段1：第一次召回（定向或全局）
         # ============================================
-        if show_progress:
-            print(f"\n{'='*60}")
-            print(f"第一步: 问题拆分")
-            print(f"{'='*60}")
-
         step_start = time.time()
-        chat_model = get_chat_model()
-        sub_questions = split_question(question, chat_model, temperature=0.1)
+        first_result = _do_retrieval(
+            question, conversation_history, top_k, retrieval_top_k,
+            predicted_kb_id, show_progress=False
+        )
         step_elapsed = time.time() - step_start
 
-        if show_progress:
-            print(f"拆分完成: {len(sub_questions)} 个子问题")
-            for i, sq in enumerate(sub_questions, 1):
-                print(f"  - 子问题 {i}: {sq}")
-            print(f"耗时: {step_elapsed:.2f} 秒")
+        # 获取最高 rerank_score
+        max_score = _get_max_rerank_score(first_result.get('retrieved_chunks', []))
 
-        result['sub_questions'] = sub_questions
-
-        # ============================================
-        # 第二步：实体识别
-        # ============================================
-        if show_progress:
-            print(f"\n{'='*60}")
-            print(f"第二步: 实体识别")
-            print(f"{'='*60}")
-
-        step_start = time.time()
-        entity_recognizer = QueryEntityRecognizer()
-        entities = entity_recognizer.recognize_entities(question, doc_id, use_graph=enable_graph)
-
-        # 转换实体为 ID
-        entity_ids = entity_recognizer.get_entity_ids(entities, doc_id) if enable_graph else []
-        step_elapsed = time.time() - step_start
-
-        if show_progress:
-            print(f"实体识别完成: {len(entities)} 个实体")
-            for entity in entities[:5]:
-                print(f"  - {entity['text']} ({entity['type']})")
-            if len(entities) > 5:
-                print(f"  ... 等 {len(entities)} 个实体")
-            print(f"匹配到 {len(entity_ids)} 个图谱实体")
-            print(f"耗时: {step_elapsed:.2f} 秒")
-
-        result['recognized_entities'] = entities
+        result['stages']['first_retrieval'] = {
+            'kb_id': predicted_kb_id,
+            'max_score': max_score,
+            'elapsed': step_elapsed
+        }
 
         # ============================================
-        # 第三步：问题向量化
+        # 阶段2：判断是否需要第二次召回
         # ============================================
-        if show_progress:
-            print(f"\n{'='*60}")
-            print(f"第三步: 问题向量化")
-            print(f"{'='*60}")
-
-        step_start = time.time()
-        encoder = get_query_encoder()
-        query_embeddings = encoder.encode_queries(sub_questions)
-        step_elapsed = time.time() - step_start
-
-        if show_progress:
-            print(f"向量化完成: {len(query_embeddings)} 个向量")
-            print(f"向量维度: {len(query_embeddings[0]) if query_embeddings else 'N/A'}")
-            print(f"耗时: {step_elapsed:.2f} 秒")
-
-        # ============================================
-        # 第四步：混合检索
-        # ============================================
-        if show_progress:
-            print(f"\n{'='*60}")
-            print(f"第四步: 混合检索 (向量+关键字+图谱)")
-            print(f"{'='*60}")
-
-        step_start = time.time()
-        hybrid_pipeline = HybridRetrievalPipeline(
-            retrieval_top_k=retrieval_top_k,
-            final_top_k=top_k,
-            weights=weights
+        need_second_retrieval = (
+            max_score < RERANK_SCORE_THRESHOLD and
+            predicted_kb_id is not None  # 只有定向召回才需要第二阶段
         )
 
-        all_retrieved_chunks = []
-        for i, (sub_q, embedding) in enumerate(zip(sub_questions, query_embeddings)):
-            chunks = hybrid_pipeline.retrieve(
-                query=sub_q,
-                query_embedding=embedding,
-                doc_id=doc_id,
-                entity_ids=entity_ids,
-                encoder=encoder,
-                enable_vector=enable_vector,
-                enable_keyword=enable_keyword,
-                enable_graph=enable_graph
+        if need_second_retrieval:
+            step_start = time.time()
+            second_result = _do_retrieval(
+                question, conversation_history, top_k, retrieval_top_k,
+                None,  # 全局召回
+                show_progress=False
             )
-            all_retrieved_chunks.append(chunks)
+            step_elapsed = time.time() - step_start
 
-        step_elapsed = time.time() - step_start
+            # 获取第二次召回的最高分
+            second_max_score = _get_max_rerank_score(second_result.get('retrieved_chunks', []))
 
-        total_chunks = sum(len(chunks) for chunks in all_retrieved_chunks)
+            result['stages']['second_retrieval'] = {
+                'kb_id': None,
+                'max_score': second_max_score,
+                'elapsed': step_elapsed
+            }
 
-        if show_progress:
-            print(f"检索完成: 共 {total_chunks} 个分片")
-            for i, chunks in enumerate(all_retrieved_chunks, 1):
-                print(f"  - 子问题 {i}: {len(chunks)} 个分片")
-            print(f"耗时: {step_elapsed:.2f} 秒")
-
-        result['retrieved_chunks'] = all_retrieved_chunks
-
-        # ============================================
-        # 第五步：答案生成
-        # ============================================
-        if show_progress:
-            print(f"\n{'='*60}")
-            print(f"第五步: 答案生成 (LLM)")
-            print(f"{'='*60}")
-
-        step_start = time.time()
-        generator = AnswerGenerator()
-
-        if len(sub_questions) == 1:
-            answer = generator.generate(
-                query=sub_questions[0],
-                retrieved_chunks=all_retrieved_chunks[0],
-                conversation_history=conversation_history
-            )
+            # 使用第二次召回的结果
+            result['retrieved_chunks'] = second_result['retrieved_chunks']
+            result['kb_id'] = None  # 标记为全局检索
+            result['answer'] = second_result['answer']
         else:
-            answer = generator.generate_for_sub_questions(
-                sub_questions=sub_questions,
-                all_retrieved_chunks=all_retrieved_chunks,
-                original_query=question
-            )
-
-        step_elapsed = time.time() - step_start
-
-        if show_progress:
-            print(f"答案生成完成")
-            print(f"耗时: {step_elapsed:.2f} 秒")
-
-        result['answer'] = answer
+            # 使用第一次召回的结果
+            result['retrieved_chunks'] = first_result['retrieved_chunks']
+            result['answer'] = first_result['answer']
 
         # ============================================
         # 完成
@@ -447,21 +343,66 @@ def process_conversation_hybrid(
         result['success'] = True
         result['total_elapsed'] = time.time() - start_time
 
-        if show_progress:
-            print(f"\n{'#'*60}")
-            print(f"# 用户问题处理完成！（混合检索）")
-            print(f"# 总耗时: {result['total_elapsed']:.2f} 秒")
-            print(f"{'#'*60}\n")
-
         return result
 
     except Exception as e:
         result['error'] = str(e)
         result['total_elapsed'] = time.time() - start_time
 
-        if show_progress:
-            print(f"\n{'!'*60}")
-            print(f"! 问题处理失败: {str(e)}")
-            print(f"{'!'*60}\n")
+        logger.error(f"[智能召回失败] 处理失败: {str(e)}, 耗时: {result['total_elapsed']:.2f}s", exc_info=True)
 
         raise
+
+
+def _do_retrieval(
+    question: str,
+    conversation_history: Optional[List[Dict[str, str]]],
+    top_k: int,
+    retrieval_top_k: int,
+    kb_id: Optional[str],
+    show_progress: bool
+) -> Dict[str, Any]:
+    """
+    执行单次检索流程
+
+    Args:
+        question: 用户问题
+        conversation_history: 对话历史
+        top_k: 最终返回数量
+        retrieval_top_k: 初始检索数量
+        kb_id: 知识库 ID（None 表示全局检索）
+        show_progress: 是否显示进度
+
+    Returns:
+        检索结果
+    """
+    return process_conversation(
+        question=question,
+        conversation_history=conversation_history,
+        top_k=top_k,
+        retrieval_top_k=retrieval_top_k,
+        kb_id=kb_id,
+        show_progress=show_progress
+    )
+
+
+def _get_max_rerank_score(chunks_list: List[List[Dict[str, Any]]]) -> float:
+    """
+    获取所有 chunks 中的最高 rerank_score
+
+    Args:
+        chunks_list: chunks 列表的列表
+
+    Returns:
+        最高分数，如果没有 chunks 返回 0.0
+    """
+    max_score = 0.0
+
+    for chunks in chunks_list:
+        for chunk in chunks:
+            score = chunk.get('rerank_score', 0)
+            if score > max_score:
+                max_score = score
+
+    return max_score
+

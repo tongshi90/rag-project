@@ -4,26 +4,28 @@
 ================================================================================
 
 【功能说明】
-将 PDF 文档中的文本内容按标题层级智能切分成多个语义分片（chunks），
+将 PDF 文档中的文本内容和表格内容按标题层级智能切分成多个语义分片（chunks），
 每个分片包含完整的标题路径和文本内容，保证所有分片拼接后为完整文档。
 
 【主入口函数】
 - split_pdf_to_chunks(pdf_path)  # 从 PDF 文件路径直接生成分片（包含完整预处理）
 
+【更新内容】
+- 整合表格提取功能，支持 PDF 文档中表格数据的完整提取
+- 表格内容会被格式化为可读文本并参与分片
+
 ================================================================================
 【PDF 分片完整拆分步骤】（split_pdf_to_chunks 函数流程）
 ================================================================================
 
-第一步：提取页面文本（extract_pages）
+第一步：提取页面文本和表格（extract_pages_with_tables）
 --------------------------------------
 1. 使用 pdfplumber 打开 PDF 文件
-2. 逐页遍历，获取页面高度和所有表格区域的 bbox 边界坐标
-3. 调用 extract_text_lines() 提取每页的文本行
-4. 过滤掉空行
-5. 判断每一行是否位于表格区域内（通过 top 坐标判断）
-6. 排除表格区域内的文本行
-7. 保留非表格区域的文本行，每行记录：text（文本内容）、top（顶部位置）、page_height（页面高度）
-8. 返回：List[List[Dict]]，按页分组的文本行列表
+2. 逐页遍历，识别表格区域和文本区域
+3. 提取非表格区域的文本行
+4. 提取表格内容并格式化为文本
+5. 合并文本和表格内容，保持原始顺序
+6. 返回：List[Dict]，包含所有文本行（包含表格内容）
 
 
 第二步：去除页眉页脚（remove_repeated_headers_footers）
@@ -53,40 +55,25 @@
 8. 返回：List[Dict]，包含所有文本行（已去除页眉页脚和页码）
 
 
-第四步：动态修正标题规则（refine_title_patterns）
+第四步：使用TitleDetector识别标题和目录（refine_title_patterns）
 --------------------------------------
-1. 初始化计数器：hit_count（命中次数）、consecutive（连续命中次数）、last（上一次命中的规则名）
-2. 遍历所有文本行，对每一行：
-   a) 依次用 RAW_TITLE_PATTERNS 中的规则进行正则匹配
-   b) 若匹配成功且文本长度 < 40 字符：
-      - hit_count[name] += 1
-      - 若当前规则名 == last，则 consecutive[name] += 1
-      - 否则重置 consecutive[name] = 1
-      - 记录 last = 当前规则名
-   c) 若都不匹配，则重置 last = None
-3. 遍历 RAW_TITLE_PATTERNS，过滤掉连续命中次数 >= 5 的规则（这些规则误判率太高）
-4. 返回：修正后的标题规则列表 List[(level_name, pattern)]
+使用 chapter_breakdown.py 中的 TitleDetector 类来检测标题和目录：
+1. 提取所有候选标题行（符合标题正则规则的行）
+2. 检测目录范围（连续符合标题结构且以页码结尾，章节名在后面重复出现）
+3. 过滤掉目录区域内的标题，只保留正文标题
+4. 按规则首次出现顺序分配层级
+5. 构建标题树
+6. 返回：标题树列表和目录范围
 
 
 第五步：按标题层级构建分片（split_chunks）
 --------------------------------------
-1. 初始化：chunks 列表、current_title_path 当前标题路径栈、current_chunk 当前分片、order 排序序号
-2. 定义 flush() 函数：将当前非空的 current_chunk 保存到 chunks 列表
-3. 遍历所有文本行，对每一行：
-   a) 依次用修正后的标题规则进行正则匹配
-   b) 若匹配成功（matched 为某个 level）：
-      - 调用 flush() 保存上一个分片
-      - 根据 matched 的层级更新 current_title_path：
-        * level1: current_title_path = [当前标题文本]
-        * level2: current_title_path = [第一级标题, 当前标题文本]
-        * level3: current_title_path = [第一级标题, 第二级标题, 当前标题文本]
-      - 创建新的 current_chunk，包含：chunk_id、order、title_path、text（标题文本）
-      - continue 进入下一行
-   c) 若不匹配任何标题规则（正文行）：
-      - 若 current_chunk 为空：创建新分片，以当前正文行开始
-      - 若 current_chunk 不为空：将当前正文行追加到 current_chunk["text"]
-4. 循环结束后，调用 flush() 保存最后一个分片
-5. 返回：初步分片列表 List[Dict]，每个包含 chunk_id、order、title_path、text
+1. 目录前的内容为第一个chunk
+2. 目录为第二个chunk（如果没有目录，则正文标题前的内容为第一个chunk）
+3. 之后按照标题树结构，按行进行chunk拆分：
+   - 每个标题行作为一个chunk的开始
+   - 从该标题行到下一个同级或更高级标题行之前的内容都属于该chunk
+4. 每个chunk包含：chunk_id、order、title_path、text、page、type
 
 
 第六步：后处理 - 合并仅含标题的分片（merge_title_only_chunks）
@@ -152,35 +139,147 @@
 
 
 ================================================================================
-【标题规则定义】（RAW_TITLE_PATTERNS）
+【标题规则定义】（使用 TitleDetector 类）
 ================================================================================
 
-层级    格式类型            正则表达式示例                    优先级
-------------------------------------------------------------------------
-level1  第X章               ^第[一二三四五六七八九十百]+章\s+.+    最高
-level2  第X节               ^第[一二三四五六七八九十百]+节\s+.+    高
-level2  中文数字顿号        ^[一二三四五六七八九十百]+、\s*.+     高
-level2  阿拉伯数字点        ^\d+(\.\d+)*\s+.+                     高
-level3  括号中文数字        ^[（(][一二三四五六七八九十百]+[）)]\s*.+  低
+TitleDetector 类支持的标题规则：
+- CN_CHAPTER: 第X章(中文数字) 如：第一章 概述
+- CN_PART: 第X部分(中文数字) 如：第一部分 背景
+- CN_SECTION: 第X节(中文数字) 如：第一节 绪论
+- CN_ARTICLE: 第X篇(中文数字) 如：第一篇 总则
+- CN_ITEM: 第X条(中文数字) 如：第一条 总则
+- NUM_CHAPTER: 第X章(阿拉伯数字) 如：第1章 概述
+- NUM_PART: 第X部分(阿拉伯数字) 如：第1部分 背景
+- NUM_SECTION: 第X节(阿拉伯数字) 如：第1节 绪论
+- NUM_ARTICLE: 第X篇(阿拉伯数字) 如：第1篇 总则
+- NUM_ITEM: 第X条(阿拉伯数字) 如：第1条 总则
+- NUM_DECIMAL: 序号 如：1.1 概述
+- NUM_SIMPLE: 纯数字+空格 如：1 概述
+- CN_LIST: 纯中文+顿号 如：一、概述
 
-注意：规则会根据实际命中情况动态调整，连续误判 >= 5 次的规则会被移除。
+注意：
+1. 使用 TitleDetector 类自动检测标题规则
+2. 规则会按首次出现顺序确定层级
+3. 目录区域会被单独识别并处理
 
 ================================================================================
 """
 import re
 import pdfplumber
+import logging
 from typing import List, Dict, Optional, Tuple
 from collections import defaultdict, Counter
 import difflib
+import sys
+from pathlib import Path
 
-# 章节切分的正则匹配规则（预设规则，作为兜底）
-RAW_TITLE_PATTERNS = [
-    ("1", r'^第[一二三四五六七八九十百]+章\s+.+'),
-    ("2", r'^第[一二三四五六七八九十百]+节\s+.+'),
-    ("3", r'^[一二三四五六七八九十百]+、\s*.+'),
-    ("4", r'^\d+(\.\d+)*[\. 、,]\s*.+'),
-    ("5", r'^[（(][一二三四五六七八九十百]+[）)]\s*.+'),
+# 导入 TitleDetector 类
+from .chapter_breakdown import TitleDetector, build_outline
+# 导入新的 PDF 读取模块
+from .pdf_reader import extract_pdf_content, format_table_as_text
+
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# 固化的标题正则规则（所有文档统一使用这套规则）
+# ============================================================================
+
+# 中文数字映射
+CHINESE_NUMS = '一二三四五六七八九十百千零'
+
+# 固化标题规则定义（带ID）
+FIXED_TITLE_RULES = [
+    {
+        "id": "rule_001",
+        "name": "第X章(中文数字)",
+        "regex": r'^第[一二三四五六七八九十百]+章\b\s*(.+)',
+        "description": "如：第一章 概述"
+    },
+    {
+        "id": "rule_002",
+        "name": "第X节(中文数字)",
+        "regex": r'^第[一二三四五六七八九十百]+节\b\s*(.+)',
+        "description": "如：第一节 背景"
+    },
+    {
+        "id": "rule_003",
+        "name": "第X篇(中文数字)",
+        "regex": r'^第[一二三四五六七八九十百]+篇\b\s*(.+)',
+        "description": "如：第一篇 绪论"
+    },
+    {
+        "id": "rule_004",
+        "name": "第X条(中文数字)",
+        "regex": r'^第[一二三四五六七八九十百]+条\b\s*(.+)',
+        "description": "如：第一条 总则"
+    },
+    {
+        "id": "rule_005",
+        "name": "第X章(阿拉伯数字)",
+        "regex": r'^第\d+章\b\s*(.+)',
+        "description": "如：第1章 概述"
+    },
+    {
+        "id": "rule_006",
+        "name": "第X节(阿拉伯数字)",
+        "regex": r'^第\d+节\b\s*(.+)',
+        "description": "如：第1节 背景"
+    },
+    {
+        "id": "rule_007",
+        "name": "第X篇(阿拉伯数字)",
+        "regex": r'^第\d+篇\b\s*(.+)',
+        "description": "如：第1篇 绪论"
+    },
+    {
+        "id": "rule_008",
+        "name": "第X条(阿拉伯数字)",
+        "regex": r'^第\d+条\b\s*(.+)',
+        "description": "如：第1条 总则"
+    },
+    {
+        "id": "rule_009",
+        "name": "纯中文+空格",
+        "regex": r'^[一二三四五六七八九十百]+[　\s]+(.+)',
+        "description": "如：一  概述"
+    },
+    {
+        "id": "rule_010",
+        "name": "纯中文+顿号",
+        "regex": r'^[一二三四五六七八九十百]+[、,]\s*(.+)',
+        "description": "如：一、概述"
+    },
+    {
+        "id": "rule_011",
+        "name": "纯数字+空格",
+        "regex": r'^\d+[　\s]+(.+)',
+        "description": "如：1  概述"
+    },
+    {
+        "id": "rule_012",
+        "name": "纯数字+顿号",
+        "regex": r'^\d+[、,]\s*(.+)',
+        "description": "如：1、概述"
+    },
+    {
+        "id": "rule_013",
+        "name": "序号+空格",
+        "regex": r'^\d+(?:\.\d+)+[　\s]+(.+)',
+        "description": "如：1.1  概述"
+    },
+    {
+        "id": "rule_014",
+        "name": "序号+顿号",
+        "regex": r'^\d+(?:\.\d+)+[、,]\s*(.+)',
+        "description": "如：1.1、概述"
+    },
 ]
+
+# 编译正则表达式缓存
+_COMPILED_PATTERNS = {rule["id"]: re.compile(rule["regex"]) for rule in FIXED_TITLE_RULES}
+
+# 全局变量：存储目录区域的行索引
+_toc_indices: set = set()
 
 # 页码的正则匹配规则
 PAGE_NUM_PATTERNS = [
@@ -254,11 +353,16 @@ def extract_line_features(line_text: str, line_index: int, total_lines: int,
         # 包含章节关键词
         if re.match(r'^第[一二三四五六七八九十百]+[章节篇]', text):
             features['starts_with_chapter_keyword'] = True
+            # 手动提取完整的章节前缀（包括"章"、"节"、"篇"字）
+            chapter_match = re.match(r'^(第[一二三四五六七八九十百]+[章节篇])\s*', text)
+            if chapter_match:
+                features['prefix_pattern'] = chapter_match.group(1)
 
-        # 提取前缀模式（用于后续聚类）
-        prefix_match = re.match(r'^([0-9一二三四五六七八九十百（）()\.\s、,]+)', text)
-        if prefix_match:
-            features['prefix_pattern'] = prefix_match.group(1)
+        # 提取前缀模式（用于后续聚类）- 只有在章节格式未设置时才执行
+        if 'prefix_pattern' not in features:
+            prefix_match = re.match(r'^([0-9一二三四五六七八九十百（）()\.\s、,]+)', text)
+            if prefix_match:
+                features['prefix_pattern'] = prefix_match.group(1)
 
     return features
 
@@ -360,6 +464,8 @@ def cluster_title_candidates(all_features: List[Dict]) -> List[Dict]:
     """
     # 第一步：筛选出可能是标题的行
     candidates = []
+    chapter_keyword_count = 0  # 统计"第X章"格式的数量
+
     for features in all_features:
         if not features:
             continue
@@ -388,6 +494,7 @@ def cluster_title_candidates(all_features: List[Dict]) -> List[Dict]:
         if features['starts_with_chapter_keyword']:
             confidence += 5
             is_title_candidate = True
+            chapter_keyword_count += 1
         if features['has_dot_separated_numbers']:
             confidence += 4
             is_title_candidate = True
@@ -422,6 +529,8 @@ def cluster_title_candidates(all_features: List[Dict]) -> List[Dict]:
                     'prefix': ''
                 })
 
+    logger.debug(f"[标题候选筛选] 找到 {len(candidates)} 个候选, 其中 {chapter_keyword_count} 个章节格式标题")
+
     return candidates
 
 
@@ -454,11 +563,21 @@ def merge_similar_patterns(candidates: List[Dict]) -> Dict[str, Dict]:
         pattern_groups[ptype]['count'] += 1
         pattern_groups[ptype]['examples'].append(candidate['text'][:30])
 
-    # 过滤掉出现次数太少的模式（至少出现2次）
-    filtered_patterns = {
-        k: v for k, v in pattern_groups.items()
-        if v['count'] >= 2
-    }
+    # 过滤掉出现次数太少的模式
+    # - 章节格式(chinese_chapter)至少出现1次即可（文档通常只有一个"第一章"）
+    # - 其他格式至少出现2次
+    filtered_patterns = {}
+    for k, v in pattern_groups.items():
+        if k == 'chinese_chapter':
+            # 章节格式放宽限制
+            if v['count'] >= 1:
+                filtered_patterns[k] = v
+        else:
+            # 其他格式需要至少出现2次
+            if v['count'] >= 2:
+                filtered_patterns[k] = v
+
+    logger.debug(f"[模式合并] 原始模式 {len(pattern_groups)} 个, 过滤后 {len(filtered_patterns)} 个")
 
     return filtered_patterns
 
@@ -534,16 +653,20 @@ def auto_detect_title_patterns(lines: List[Dict]) -> List[Tuple[str, str]]:
     candidates = cluster_title_candidates(all_features)
 
     if not candidates:
+        logger.debug(f"[自动检测] 未检测到标题候选，将使用预设规则")
         return []
 
     # 第三步：合并相似模式
     pattern_groups = merge_similar_patterns(candidates)
 
     if not pattern_groups:
+        print(f"  [自动检测] 未找到有效的标题模式组，将使用预设规则")
         return []
 
     # 第四步：确定层级顺序
     detected_patterns = determine_pattern_hierarchy(pattern_groups, lines)
+
+    print(f"  [自动检测] 检测到 {len(detected_patterns)} 个标题模式")
 
     return detected_patterns
 
@@ -569,8 +692,102 @@ def extract_page_number(text: str) -> Optional[int]:
     return None
 
 
+# ============================================
+# 🆕 表格提取模块（整合 test_1.py 逻辑）
+# - 使用 title.py 的表头识别和内容扩充逻辑
+# - 支持多级表头扁平化
+# - 保留空值字段
+# ============================================
+
+# 注意：表格处理逻辑已移至 pdf_reader.py（基于 test_1.py）
+# 以下保留旧函数用于向后兼容
+
+def clean_cell(s):
+    """清洗单元格内容"""
+    if s is None:
+        return ""
+    return str(s).replace("\n", " ").strip()
+
+
+def extract_pages_with_tables(pdf_path: str) -> List[Dict]:
+    """
+    从 PDF 中提取所有页面内容（包括文本和表格）
+    使用 pdf_reader.py 中的逻辑（基于 test_1.py）
+
+    Returns:
+        List[Dict]: 包含所有文本行的列表，每行包含 text, top, page_number
+    """
+    # 使用新的 PDF 读取模块
+    all_elements = extract_pdf_content(pdf_path)
+
+    # 转换为统一格式
+    all_lines = []
+
+    for elem in all_elements:
+        if elem["type"] == "text":
+            all_lines.append({
+                "text": elem["content"],
+                "top": elem["top"],
+                "page_number": elem["page_number"]
+            })
+        elif elem["type"] == "table":
+            # 将表格转换为文本行
+            table_text = format_table_as_text(elem["content"])
+            if table_text:
+                # 按行分割表格内容
+                for line in table_text.split("\n"):
+                    if line.strip():
+                        all_lines.append({
+                            "text": line.strip(),
+                            "top": elem["top"],
+                            "page_number": elem["page_number"]
+                        })
+
+    return all_lines
+
+
+def remove_header_footer_from_elements(elements):
+    """从元素列表中去除页眉页脚"""
+    if len(elements) < 3:
+        return elements
+
+    HEADER_LINES = 2
+    FOOTER_LINES = 2
+    header_candidates = []
+    footer_candidates = []
+
+    for idx, elem in enumerate(elements):
+        if elem["type"] != "text":
+            continue
+        txt = elem["content"].strip()
+        if idx < HEADER_LINES:
+            header_candidates.append(txt)
+        elif idx >= len(elements) - FOOTER_LINES:
+            footer_candidates.append(txt)
+
+    def is_likely_page_num(s):
+        return any(k in s for k in ["第", "页", "页码", "Page", "page"]) or s.isdigit()
+
+    new_elements = []
+    for idx, elem in enumerate(elements):
+        if elem["type"] != "text":
+            new_elements.append(elem)
+            continue
+
+        txt = elem["content"].strip()
+        is_header = idx < HEADER_LINES and txt in header_candidates
+        is_footer = idx >= len(elements) - FOOTER_LINES and txt in footer_candidates
+        is_page = is_likely_page_num(txt)
+
+        if is_header or is_footer or is_page:
+            continue
+        new_elements.append(elem)
+
+    return new_elements
+
+
 def extract_pages(pdf_path: str) -> List[List[Dict]]:
-    """从 PDF 中提取所有页面（排除表格）"""
+    """从 PDF 中提取所有页面（排除表格）- 保留用于向后兼容"""
     pages = []
 
     with pdfplumber.open(pdf_path) as pdf:
@@ -688,173 +905,286 @@ def remove_page_numbers(pages: List[List[Dict]], threshold: float = 0.7) -> List
     return cleaned_lines
 
 
-def refine_title_patterns(lines: List[Dict]) -> List:
+def refine_title_patterns(lines: List[Dict]) -> Tuple[List, Dict]:
     """
-    根据实际命中情况动态调整标题规则
-
-    新增功能：整合自动检测的标题模式与预设规则
+    使用 TitleDetector 类进行标题检测和目录识别
 
     流程：
-    1. 先自动检测文档中的标题模式
-    2. 将检测到的模式与预设规则合并
-    3. 根据命中情况筛选有效规则
-    4. 按首次出现顺序确定层级
+    1. 将 Dict 类型的 lines 转换为字符串列表
+    2. 使用 TitleDetector 提取候选标题
+    3. 检测目录范围
+    4. 过滤标题（只保留正文标题）
+    5. 按规则首次出现顺序分配层级
+    6. 构建标题树
+
+    Returns:
+        Tuple[List, Dict]: (标题树列表, 目录范围信息)
+        标题树格式: [{"title": "标题文本", "line": 行号, "rule": 规则ID, "level": 层级, "children": [...]}]
+        目录范围: {"toc_start": 开始行号, "toc_end": 结束行号} 或 None
     """
-    # 第一步：自动检测文档中的标题模式
-    detected_patterns = auto_detect_title_patterns(lines)
+    print(f"\n{'='*60}")
+    print(f"【开始标题格式识别 - TitleDetector版本】")
+    print(f"{'='*60}")
 
-    # 第二步：合并检测到的模式和预设规则
-    # 如果自动检测到了模式，优先使用；否则使用预设规则
-    if detected_patterns:
-        # 使用自动检测的模式
-        all_patterns = detected_patterns
-        use_detected = True
-    else:
-        # 使用预设规则
-        all_patterns = [(name, pattern) for name, pattern in RAW_TITLE_PATTERNS]
-        use_detected = False
+    if not lines:
+        print(f"  [警告] 文档为空，无法检测标题")
+        return [], None
 
-    # 第三步：根据命中情况筛选规则
-    hit_count = defaultdict(int)
-    consecutive = defaultdict(int)
-    max_consecutive = defaultdict(int)
-    last_index = None
+    # 第一步：将 Dict 类型的 lines 转换为字符串列表（保留原始行索引）
+    lines_as_strings = [line.get("text", "") for line in lines]
 
-    for line in lines:
-        text = line["text"]
-        for idx, (name, pattern) in enumerate(all_patterns):
-            if re.match(pattern, text) and len(text) < 50:
-                hit_count[idx] += 1
-                if last_index == idx:
-                    consecutive[idx] += 1
-                else:
-                    consecutive[idx] = 1
+    print(f"\n  [步骤1] 使用 TitleDetector 扫描 {len(lines_as_strings)} 行文本...")
 
-                if consecutive[idx] > max_consecutive[idx]:
-                    max_consecutive[idx] = consecutive[idx]
+    # 第二步：使用 TitleDetector 检测标题和目录
+    detector = TitleDetector()
 
-                last_index = idx
-                break
-        else:
-            last_index = None
+    # 提取候选标题
+    candidates = detector.extract_candidates(lines_as_strings)
+    logger.debug(f"发现 {len(candidates)} 个候选标题")
 
-    # 第四步：筛选有效规则
-    refined = []
-    valid_indices = []
-    for idx, (name, pattern) in enumerate(all_patterns):
-        # 只保留命中过的规则，且连续误判次数 < 5
-        if hit_count[idx] == 0:
-            continue
-        if max_consecutive[idx] >= 5:
-            continue
-        refined.append((name, pattern))
-        valid_indices.append(idx)
+    # 检测目录范围
+    toc_range = detector.detect_toc(candidates, lines_as_strings)
 
-    # 如果使用预设规则且有有效规则，按原有逻辑重新排序
-    if not use_detected and refined:
-        pattern_first_appearance = {}
-        pattern_appearance_order = []
+    # 过滤标题（只保留正文标题）
+    titles = detector.filter_titles(candidates, toc_range)
+    logger.debug(f"过滤目录后剩余标题: {len(titles)} 个")
 
-        for line in lines:
-            text = line["text"]
-            for idx, (name, pattern) in enumerate(all_patterns):
-                if idx not in valid_indices:
-                    continue
-                if idx in pattern_first_appearance:
-                    continue
-                if re.match(pattern, text) and len(text) < 50:
-                    pattern_first_appearance[idx] = len(pattern_appearance_order)
-                    pattern_appearance_order.append(idx)
-                    break
+    # 分配层级
+    titles = detector.assign_levels(titles)
 
-            if len(pattern_appearance_order) == len(valid_indices):
-                break
+    # 构建标题树
+    tree = detector.build_tree(titles)
 
-        if pattern_appearance_order:
-            final_refined = []
-            idx_to_pattern = {idx: pat for idx, pat in zip(valid_indices, refined)}
-            for level, idx in enumerate(pattern_appearance_order, start=1):
-                final_refined.append((f"level{level}", idx_to_pattern[idx]))
-            return final_refined
+    # 保存目录范围信息
+    toc_info = None
+    if toc_range:
+        toc_info = {"toc_start": toc_range[0], "toc_end": toc_range[1]}
 
-    # 使用自动检测模式时，或预设规则无需重排序时
-    return refined
+    return tree, toc_info
 
 
-def split_chunks(lines: List[Dict], title_patterns: List) -> List[Dict]:
-    """按标题层级构建 chunks"""
+def split_chunks(lines: List[Dict], title_tree: List, toc_info: Dict = None) -> List[Dict]:
+    """
+    按标题层级构建 chunks
+
+    新规则：
+    1. 目录前的内容为第一个chunk
+    2. 目录为第二个chunk（如果没有目录，则正文标题前的内容为第一个chunk）
+    3. 之后按照标题树结构，按行进行chunk拆分
+
+    Args:
+        lines: 文本行列表（Dict类型，包含text和page_number）
+        title_tree: 标题树列表（由refine_title_patterns返回）
+        toc_info: 目录范围信息 {"toc_start": 开始行号, "toc_end": 结束行号}
+
+    Returns:
+        chunks列表
+    """
+    logger.debug(f"开始按标题层级拆分 Chunks，总行数: {len(lines)}, 标题树节点数: {len(title_tree)}")
+
     chunks = []
-    current_title_path = []
-    current_chunk = None
     order = 0
 
-    def flush():
-        nonlocal current_chunk
-        if current_chunk and current_chunk["text"].strip():
-            chunks.append(current_chunk)
-        current_chunk = None
+    # 将标题树展平为按行号排序的列表
+    def flatten_tree(tree, level=1, parent_path=[]):
+        """将标题树展平为列表，每个元素包含标题信息和层级"""
+        result = []
+        for node in tree:
+            title_path = parent_path + [node["title"]]
+            result.append({
+                "title": node["title"],
+                "line": node["line"],  # 1-based 行号
+                "level": node["level"],
+                "rule": node["rule"],
+                "title_path": title_path.copy()
+            })
+            # 递归处理子节点
+            if node.get("children"):
+                result.extend(flatten_tree(node["children"], level + 1, title_path))
+        return result
 
-    for line in lines:
-        text = line["text"]
-        page_number = line.get("page_number", 1)  # 获取页码，默认为1
-        matched = None
+    # 展平标题树
+    flat_titles = flatten_tree(title_tree)
+    # 按行号排序
+    flat_titles.sort(key=lambda x: x["line"])
 
-        for level, pattern in title_patterns:
-            if re.match(pattern, text):
-                matched = level
+    # 获取目录范围
+    toc_start = toc_info.get("toc_start") - 1 if toc_info else None  # 转换为0-based
+    toc_end = toc_info.get("toc_end") - 1 if toc_info else None  # 转换为0-based
+
+    def is_catalog_title(text: str) -> bool:
+        """判断是否是目录标题（如"目录"、"目  录"、"CONTENTS"等）"""
+        text = text.strip().replace(" ", "").replace("　", "")
+        catalog_keywords = ["目录", "目錄", "contents", "catalog", "index"]
+        text_lower = text.lower()
+        for keyword in catalog_keywords:
+            if keyword in text_lower or text_lower in keyword:
+                return True
+        return False
+
+    # 第一步：处理目录前的内容
+    pre_catalog_lines = []
+    pre_catalog_end = toc_start - 1 if toc_start is not None else -1
+
+    print(f"\n[步骤1] 处理目录前的内容")
+    if pre_catalog_end >= 0:
+        for i in range(pre_catalog_end + 1):
+            text = lines[i].get("text", "").strip()
+            if text:
+                pre_catalog_lines.append(text)
+
+        if pre_catalog_lines:
+            order += 1
+            chunk = {
+                "chunk_id": str(order),
+                "order": order,
+                "title_path": [],
+                "text": "\n".join(pre_catalog_lines),
+                "page": lines[0].get("page_number", 1),
+                "type": "text"
+            }
+            chunks.append(chunk)
+    else:
+        logger.debug("无目录前内容")
+
+    # 第二步：处理目录内容
+    catalog_lines = []
+    if toc_start is not None and toc_end is not None:
+        for i in range(toc_start, toc_end + 1):
+            text = lines[i].get("text", "").strip()
+            if text:
+                catalog_lines.append(text)
+
+        if catalog_lines:
+            order += 1
+            chunk = {
+                "chunk_id": str(order),
+                "order": order,
+                "title_path": ["目录"],
+                "text": "\n".join(catalog_lines),
+                "page": lines[toc_start].get("page_number", 1),
+                "type": "catalog"
+            }
+            chunks.append(chunk)
+    else:
+        logger.debug("无目录内容")
+
+    # 第三步：按标题树拆分正文内容
+    # 确定正文起始行
+    content_start = toc_end + 1 if toc_end is not None else 0
+    if content_start >= len(lines):
+        content_start = len(lines) - 1
+
+    logger.debug(f"正文起始行: {content_start + 1}")
+
+    # 构建行号到标题的映射（只包含正文区域）
+    line_to_title = {}
+    for title_info in flat_titles:
+        line_num = title_info["line"] - 1  # 转换为0-based
+        if line_num >= content_start:
+            line_to_title[line_num] = title_info
+
+    logger.debug(f"标题行数量: {len(line_to_title)}")
+
+    # 获取排序后的标题行号列表
+    sorted_title_lines = sorted(line_to_title.keys())
+
+    # 分组连续的标题行
+    title_groups = []
+    i = 0
+    while i < len(sorted_title_lines):
+        current_line = sorted_title_lines[i]
+        current_group = [current_line]
+
+        # 检查后续行是否连续
+        while i + 1 < len(sorted_title_lines):
+            next_line = sorted_title_lines[i + 1]
+            if next_line == current_line + 1:
+                # 连续的行
+                current_group.append(next_line)
+                current_line = next_line
+                i += 1
+            else:
+                # 不连续，停止
                 break
 
-        if matched:
-            flush()
+        title_groups.append(current_group)
+        i += 1
 
-            # 支持任意层级的标题（level1, level2, level3, ...）
-            if matched.startswith("level"):
-                level_num = int(matched.replace("level", ""))
-                # 保留前 (level_num - 1) 个标题，替换当前层级
-                current_title_path = current_title_path[:level_num - 1] + [text]
-            else:
-                # 兼容旧格式：直接使用原逻辑
-                if matched == "level1" or matched == "1":
-                    current_title_path = [text]
-                elif matched == "level2" or matched == "2":
-                    current_title_path = current_title_path[:1] + [text]
-                elif matched == "level3" or matched == "3":
-                    current_title_path = current_title_path[:2] + [text]
+    logger.debug(f"连续标题分组数: {len(title_groups)}")
 
-            # 标题作为新 chunk 的开始
+    # 兜底逻辑：如果没有检测到标题，将整个正文内容作为一个chunk
+    if not title_groups and content_start < len(lines):
+        print(f"\n  [兜底处理] 未检测到标题，将整个正文内容作为一个chunk")
+
+        # 收集所有正文内容
+        content_lines = []
+        for j in range(content_start, len(lines)):
+            text = lines[j].get("text", "").strip()
+            if text:
+                content_lines.append(text)
+
+        if content_lines:
             order += 1
-            current_chunk = {
+            chunk = {
                 "chunk_id": str(order),
                 "order": order,
-                "title_path": current_title_path.copy(),
-                "text": text,
-                "page": page_number  # 添加页码
+                "title_path": [],  # 无标题路径
+                "text": "\n".join(content_lines),
+                "page": lines[content_start].get("page_number", 1),
+                "type": "text"
             }
-            continue
+            chunks.append(chunk)
 
-        if not current_chunk:
-            order += 1
-            current_chunk = {
-                "chunk_id": str(order),
-                "order": order,
-                "title_path": current_title_path.copy(),
-                "text": text,
-                "page": page_number  # 添加页码
-            }
+            print(f"  创建了1个无标题chunk，包含 {len(content_lines)} 行文本")
+
+    # 为每个分组创建chunk
+    for group_idx, title_lines in enumerate(title_groups):
+        # 获取该分组中所有标题信息
+        group_titles = [line_to_title[l] for l in title_lines]
+
+        # chunk 的起始行是第一个标题行
+        chunk_start = title_lines[0]
+
+        # chunk 的结束行是下一个标题行之前，或者文档末尾
+        if group_idx + 1 < len(title_groups):
+            chunk_end = title_groups[group_idx + 1][0]
         else:
-            current_chunk["text"] += "\n" + text
-            # 更新页码为最新页面的页码（chunk 可能跨越多页）
-            current_chunk["page"] = page_number
+            chunk_end = len(lines)
 
-    flush()
+        # 标题路径使用最后一个标题的路径
+        last_title = group_titles[-1]
+        chunk_title_path = last_title["title_path"]
+        chunk_page = lines[chunk_start].get("page_number", 1)
+
+        # 收集该chunk的所有内容
+        chunk_lines = []
+        for j in range(chunk_start, chunk_end):
+            text = lines[j].get("text", "").strip()
+            if text:
+                chunk_lines.append(text)
+
+        if chunk_lines:
+            order += 1
+            chunk = {
+                "chunk_id": str(order),
+                "order": order,
+                "title_path": chunk_title_path,
+                "text": "\n".join(chunk_lines),
+                "page": chunk_page,
+                "type": "text"
+            }
+            chunks.append(chunk)
+
     return chunks
 
 
 def get_title_pattern_type(title: str) -> Optional[str]:
     """获取标题匹配的格式类型"""
-    for level, pattern in RAW_TITLE_PATTERNS:
-        if re.match(pattern, title):
-            return level
+    for rule in FIXED_TITLE_RULES:
+        pattern = _COMPILED_PATTERNS[rule["id"]]
+        if pattern.match(title):
+            return rule["id"]
     return None
 
 
@@ -1000,17 +1330,22 @@ def post_process_chunks(chunks: List[Dict], file_id: str = None, kb_id: str = No
         # 提取关键字
         chunk["keywords"] = extract_keywords(chunk.get("text", ""), top_k=10)
         chunk["length"] = len(chunk.get("text", ""))
-        chunk["type"] = "text"  # 标记 chunk 类型
+        # 保留原有的type字段（如catalog），如果没有则设置为text
+        if "type" not in chunk:
+            chunk["type"] = "text"
 
     return chunks
 
 
-def split_pdf_to_chunks(pdf_path: str, file_id: str = None, kb_id: str = None) -> tuple[List[Dict], List]:
+def split_pdf_to_chunks(pdf_path: str, file_id: str = None, kb_id: str = None) -> tuple[List[Dict], Dict]:
     """
     从 PDF 文件直接生成 chunks
 
-    TODO: 当前仅处理文本内容，表格和图片数据未包含
-    TODO: 需要调用 split_tables_from_pdf() 和 split_images_from_pdf() 并合并结果
+    功能说明：
+    - 提取 PDF 中的文本和表格内容
+    - 表格内容会被格式化为可读文本并参与分片
+    - 支持跨页表格的智能识别和合并
+    - 自动去除页眉页脚
 
     Args:
         pdf_path: PDF 文件路径
@@ -1018,15 +1353,26 @@ def split_pdf_to_chunks(pdf_path: str, file_id: str = None, kb_id: str = None) -
         kb_id: 知识库 ID（可选）
 
     Returns:
-        (chunks, title_patterns): 分片列表和标题正则规则
+        (chunks, result_info): 分片列表和结果信息
+        result_info包含: {"title_tree": 标题树, "toc_info": 目录信息}
     """
-    pages = extract_pages(pdf_path)
-    pages = remove_repeated_headers_footers(pages)
-    lines = remove_page_numbers(pages)
-    title_patterns = refine_title_patterns(lines)
-    chunks = split_chunks(lines, title_patterns)
+    # 使用新的表格提取功能（固定包含表格）
+    lines = extract_pages_with_tables(pdf_path)
+
+    # 使用新的TitleDetector进行标题检测
+    title_tree, toc_info = refine_title_patterns(lines)
+    chunks = split_chunks(lines, title_tree, toc_info)
     chunks = post_process_chunks(chunks, file_id, kb_id)
-    return chunks, title_patterns
+
+    # 为了向后兼容，生成空的 title_patterns（不再使用正则规则验证）
+    # 新的验证逻辑应该基于 title_tree
+    result_info = {
+        "title_tree": title_tree,
+        "toc_info": toc_info,
+        "title_patterns": []  # 空列表，表示不使用旧的验证方式
+    }
+
+    return chunks, result_info
 
 
 def extract_keywords(text: str, top_k: int = 10) -> List[str]:
@@ -1045,7 +1391,7 @@ def extract_keywords(text: str, top_k: int = 10) -> List[str]:
         keywords = jieba.analyse.extract_tags(text, topK=top_k)
         return keywords
     except Exception as e:
-        print(f"关键字提取失败: {e}")
+        logger.error(f"关键字提取失败: {e}")
         return []
 
 

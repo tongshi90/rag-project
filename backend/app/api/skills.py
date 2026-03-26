@@ -6,12 +6,15 @@ import re
 import os
 import shutil
 import zipfile
+import logging
 from pathlib import Path
 from flask import request, jsonify
 
 from app.api import api_bp
 from app.models.skill_card import skill_card_db, SkillCard
 from app.config.paths import SKILLS_PATH
+
+logger = logging.getLogger(__name__)
 
 
 def get_publish_dir():
@@ -190,15 +193,11 @@ def create_skill():
     # Create skill folder
     skills_dir = get_skills_dir()
     skill_folder = skills_dir / skill_code
-    print(f'[DEBUG] Skills directory: {skills_dir}')
-    print(f'[DEBUG] Skill folder: {skill_folder}')
-    print(f'[DEBUG] Skill folder exists: {skill_folder.exists()}')
     try:
         skill_folder.mkdir(parents=True, exist_ok=True)
-        print(f'[DEBUG] Folder created successfully')
     except Exception as e:
         # If folder creation fails, rollback database insert
-        print(f'[ERROR] Failed to create folder: {str(e)}')
+        logger.error(f"Failed to create skill folder: {str(e)}")
         skill_card_db.delete_skill_card(card_id)
         return jsonify({
             'code': 500,
@@ -304,7 +303,7 @@ def delete_skill(card_id):
                 shutil.rmtree(skill_folder)
             except Exception as e:
                 # Log error but don't fail the deletion
-                print(f'Warning: Failed to delete skill folder {skill_folder}: {str(e)}')
+                logger.warning(f"Failed to delete skill folder {skill_folder}: {str(e)}")
 
     return jsonify({
         'code': 0,
@@ -368,7 +367,7 @@ def publish_skill(card_id):
     # Create zip package before publishing
     try:
         zip_path = create_skill_zip(existing_card.skill_code)
-        print(f'[INFO] Created zip package for skill {existing_card.skill_code}: {zip_path}')
+        logger.info(f"Created zip package for skill {existing_card.skill_code}: {zip_path}")
     except Exception as e:
         return jsonify({
             'code': 500,
@@ -408,9 +407,9 @@ def unpublish_skill(card_id):
     if zip_path.exists():
         try:
             zip_path.unlink()
-            print(f'[INFO] Removed zip package for skill {existing_card.skill_code}')
+            logger.info(f"Removed zip package for skill {existing_card.skill_code}")
         except Exception as e:
-            print(f'[WARNING] Failed to remove zip package: {str(e)}')
+            logger.warning(f"Failed to remove zip package: {str(e)}")
 
     # Return updated card
     updated_card = skill_card_db.get_skill_card_by_id(card_id)

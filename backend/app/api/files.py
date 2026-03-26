@@ -4,6 +4,7 @@ File Management API Routes
 import os
 import shutil
 import threading
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from app.api import api_bp
 from app.config.paths import UPLOAD_PATH, VECTOR_DB_PATH
 from app.models import db, File
 from app.services import parse_pdf, delete_document_vectors
+
+logger = logging.getLogger(__name__)
 
 
 def get_upload_dir():
@@ -67,30 +70,18 @@ def process_document_async(file_path, file_name, file_id, kb_id: str = None):
     """
     def _process():
         try:
-            print(f"\n{'='*60}")
-            print(f"开始异步处理文档: {file_name}")
-            print(f"文档 ID: {file_id}")
-            if kb_id:
-                print(f"知识库 ID: {kb_id}")
-            print(f"{'='*60}\n")
-
             # 调用完整的文档处理流程
             result = parse_pdf(file_path, file_id, kb_id)
 
             # 根据处理结果更新文件状态
             if result.get('success'):
                 db.update_file_status(file_id, 'completed')
-                print(f"\n[异步] 文档处理成功完成!")
-                print(f"  - 最终 chunks: {result['steps'].get('embed', {}).get('success_count', 0)}")
-                print(f"  - 总耗时: {result.get('total_elapsed', 0):.2f} 秒")
             else:
                 db.update_file_status(file_id, 'failed')
-                print(f"\n[异步] 文档处理失败: {result.get('error', 'Unknown error')}")
+                logger.error(f"[异步处理] 文档 {file_id} 处理失败: {result.get('error', 'Unknown error')}")
 
         except Exception as e:
-            print(f"\n[异步] 文档处理异常: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"[异步处理] 文档 {file_id} 处理异常: {e}", exc_info=True)
             db.update_file_status(file_id, 'failed')
 
     # 在后台线程中处理
@@ -246,7 +237,7 @@ def delete_all_files():
             try:
                 os.remove(absolute_path)
             except Exception as e:
-                print(f"Failed to delete file {absolute_path}: {e}")
+                logger.warning(f"Failed to delete file {absolute_path}: {e}")
 
     # 直接删除 vector_db 文件夹（更彻底）
     vector_db_to_delete = VECTOR_DB_PATH
@@ -254,15 +245,167 @@ def delete_all_files():
     if vector_db_to_delete.exists():
         try:
             shutil.rmtree(vector_db_to_delete)
-            print(f"向量数据库已删除: {vector_db_to_delete}")
+            logger.info(f"向量数据库已删除: {vector_db_to_delete}")
         except Exception as e:
-            print(f"删除向量数据库失败: {e}")
+            logger.error(f"删除向量数据库失败: {e}")
 
     # 重置向量存储实例（确保下次使用时重新初始化）
     from app.services.document_processing.embedding import reset_vector_store
     reset_vector_store()
 
     return jsonify({'success': True})
+
+
+@api_bp.route('/files/clear-knowledge', methods=['POST'])
+def clear_knowledge_data():
+    """
+    清空所有知识库相关数据
+
+    保留：
+    - 技能卡片数据库 (skill_cards)
+    - skills 文件夹
+
+    删除：
+    - 向量数据库 (vector_db)
+    - 知识图谱 (graph)
+    - 关键字索引 (keyword_index)
+    - 上传文件 (upload)
+    - 文件数据库记录 (files)
+    - 知识库分组 (knowledge_bases)
+    - 检索测试历史 (retrieval_test_history)
+    """
+    from app.config.paths import VECTOR_DB_PATH, GRAPH_DB_PATH, KEYWORD_INDEX_PATH, DATA_DIR
+    import time
+
+    result = {
+        'success': False,
+        'cleared': [],
+        'errors': []
+    }
+
+    # 1. 先清空向量数据库的集合内容（使用 ChromaDB API）
+    try:
+        from app.services.document_processing.embedding.vector_store import get_vector_store, reset_vector_store
+
+        # 获取向量存储实例并清空集合
+        vector_store = get_vector_store()
+        cleared = vector_store.clear_collection()
+        if cleared:
+            result['cleared'].append('向量数据库集合')
+
+        # 重置向量存储实例（清除全局单例引用）
+        reset_vector_store()
+
+    except Exception as e:
+        result['errors'].append(f'向量数据库清理失败: {str(e)}')
+        import traceback
+        traceback.print_exc()
+
+    # 2. 重置关键字索引器实例
+    try:
+        from app.services.document_processing.keyword_index.keyword_indexer import reset_keyword_indexer
+        reset_keyword_indexer()
+        result['cleared'].append('关键字索引器实例')
+    except Exception as e:
+        result['errors'].append(f'关键字索引器重置失败: {str(e)}')
+
+    # 3. 重置图谱检索器实例
+    try:
+        from app.services.user_interaction.graph_retrieval.graph_retriever import reset_graph_retriever
+        reset_graph_retriever()
+        result['cleared'].append('图谱检索器实例')
+    except Exception as e:
+        result['errors'].append(f'图谱检索器重置失败: {str(e)}')
+
+    # 4. 清空 embedding 缓存
+    try:
+        from app.services.document_processing.validator.validate import clear_embedding_cache
+        clear_embedding_cache()
+        result['cleared'].append('Embedding 缓存')
+    except Exception as e:
+        result['errors'].append(f'Embedding 缓存清理失败: {str(e)}')
+
+    # 5. 重置查询编码器实例
+    try:
+        from app.services.user_interaction.query_encoder.query_encoder import reset_query_encoder
+        reset_query_encoder()
+        result['cleared'].append('查询编码器实例')
+    except Exception as e:
+        result['errors'].append(f'查询编码器重置失败: {str(e)}')
+
+    # 5. 删除向量数据库目录
+    try:
+        if VECTOR_DB_PATH.exists():
+            shutil.rmtree(VECTOR_DB_PATH)
+            result['cleared'].append('向量数据库目录')
+            # 等待文件系统同步
+            time.sleep(0.3)
+    except Exception as e:
+        result['errors'].append(f'向量数据库目录删除失败: {str(e)}')
+
+    # 6. 重新创建向量数据库目录（为后续使用做准备）
+    try:
+        VECTOR_DB_PATH.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        result['errors'].append(f'向量数据库目录创建失败: {str(e)}')
+
+    # 7. 清空知识图谱
+    try:
+        if GRAPH_DB_PATH.exists():
+            shutil.rmtree(GRAPH_DB_PATH)
+            GRAPH_DB_PATH.mkdir(parents=True, exist_ok=True)
+            result['cleared'].append('知识图谱')
+    except Exception as e:
+        result['errors'].append(f'知识图谱清理失败: {str(e)}')
+
+    # 8. 清空关键字索引
+    try:
+        if KEYWORD_INDEX_PATH.exists():
+            shutil.rmtree(KEYWORD_INDEX_PATH)
+            KEYWORD_INDEX_PATH.mkdir(parents=True, exist_ok=True)
+            result['cleared'].append('关键字索引')
+    except Exception as e:
+        result['errors'].append(f'关键字索引清理失败: {str(e)}')
+
+    # 9. 清空上传文件
+    try:
+        upload_path = get_upload_dir()
+        if upload_path.exists():
+            for item in list(upload_path.iterdir()):
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+            result['cleared'].append('上传文件')
+    except Exception as e:
+        result['errors'].append(f'上传文件清理失败: {str(e)}')
+
+    # 10. 清空数据库记录（保留 skill_cards，删除 knowledge_bases 和 files）
+    try:
+        files_deleted = db.delete_all_files()
+        result['cleared'].append(f'{files_deleted} 条文件记录')
+
+        # 删除知识库分组
+        from app.models.knowledge_base import knowledge_base_db
+        kb_deleted = knowledge_base_db.delete_all()
+        result['cleared'].append(f'{kb_deleted} 条知识库分组记录')
+
+        # 删除检索测试历史
+        import sqlite3
+        db_path = DATA_DIR / 'rag.db'
+        if db_path.exists():
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM retrieval_test_history')
+            conn.commit()
+            conn.close()
+            result['cleared'].append('检索测试历史')
+    except Exception as e:
+        result['errors'].append(f'数据库清理失败: {str(e)}')
+
+    result['success'] = len(result['cleared']) > 0
+
+    return jsonify(result)
 
 
 @api_bp.route('/files/<file_id>/stats', methods=['GET'])

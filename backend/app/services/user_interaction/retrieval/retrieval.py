@@ -7,6 +7,7 @@
 """
 
 import time
+import logging
 from typing import List, Dict, Any, Optional
 
 from app.services.document_processing.embedding.vector_store import VectorStore, get_vector_store
@@ -14,6 +15,9 @@ from app.services.document_processing.keyword_index import get_keyword_indexer
 from app.services.user_interaction.graph_retrieval import get_graph_retriever
 from app.services.user_interaction.context_enricher import ContextEnricher
 from app.config.model_config import get_reranker_model
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 class VectorSearcher:
@@ -61,7 +65,7 @@ class VectorSearcher:
             results = self.vector_store.search(query_embedding, top_k=top_k, filter=filter)
             return results
         except Exception as e:
-            print(f"向量检索失败: {e}")
+            logger.error(f"[向量检索] 向量检索失败: {e}")
             return []
 
     def search_by_text(
@@ -176,7 +180,7 @@ class Reranker:
             return reranked_candidates[:top_k]
 
         except Exception as e:
-            print(f"模型重排序失败: {e}，返回原始顺序")
+            logger.error(f"[重排序] 模型重排序失败: {e}，返回原始顺序")
             return candidates[:top_k]
 
 
@@ -241,28 +245,14 @@ class RetrievalPipeline:
         elif encoder:
             candidates = self.searcher.search_by_text(query, encoder, top_k=self.retrieval_top_k, filter=filter条件)
         else:
+            logger.error("[检索流程] 必须提供 query_embedding 或 encoder")
             raise ValueError("必须提供 query_embedding 或 encoder")
+
+        elapsed_retrieval = time.time() - start_time
 
         # 第二步：模型重排序
         final_results = self.reranker.rerank(query, candidates, top_k=self.final_top_k)
-
-        # 调试打印：最终 top_k chunks 的完整 text 信息
-        print(f"\n{'='*60}")
-        print(f"[最终检索结果] 传给 LLM 的 {len(final_results)} 个 chunks:")
-        if self.kb_id:
-            print(f"[知识库过滤] kb_id: {self.kb_id}")
-        for i, r in enumerate(final_results, 1):
-            chunk_id = r.get('chunk_id', r.get('id', 'unknown'))
-            doc_id = r.get('metadata', {}).get('doc_id', 'unknown')
-            order = r.get('metadata', {}).get('order', 'N/A')
-            rerank_score = r.get('rerank_score', 0)
-            text_content = r.get('text', '')
-            print(f"\n  [{i}] chunk_id={chunk_id}, doc_id={doc_id}, order={order}, rerank_score={rerank_score:.4f}")
-            print(f"      text: {text_content}")
-        print(f"{'='*60}\n")
-
-        elapsed = time.time() - start_time
-        print(f"检索完成: 初始{len(candidates)}条 → 重排序后{len(final_results)}条 (耗时 {elapsed:.2f}s)")
+        elapsed_rerank = time.time() - start_time - elapsed_retrieval
 
         return final_results
 
@@ -524,17 +514,14 @@ class HybridRetrievalPipeline(RetrievalPipeline):
                     query, encoder, top_k=self.retrieval_top_k,
                     filter={"doc_id": doc_id} if doc_id else None
                 )
-            print(f"向量检索: {len(vector_results)} 条")
 
         # 2. 关键字检索
         if enable_keyword:
             keyword_results = self._keyword_retrieve(query, doc_id)
-            print(f"关键字检索: {len(keyword_results)} 条")
 
         # 3. 图谱检索
         if enable_graph and doc_id and entity_ids:
             graph_results = self._graph_retrieve(entity_ids, doc_id)
-            print(f"图谱检索: {len(graph_results)} 条")
 
         # 4. RRF 融合
         fused_results = self._rrf_fusion(vector_results, keyword_results, graph_results)
@@ -542,23 +529,6 @@ class HybridRetrievalPipeline(RetrievalPipeline):
         # 5. 重排序（取前 N 个候选）
         candidates = fused_results[:self.retrieval_top_k]
         final_results = self.reranker.rerank(query, candidates, top_k=self.final_top_k)
-
-        # 调试打印：最终 top_k chunks 的完整 text 信息
-        print(f"\n{'='*60}")
-        print(f"[最终检索结果] 传给 LLM 的 {len(final_results)} 个 chunks:")
-        for i, r in enumerate(final_results, 1):
-            chunk_id = r.get('chunk_id', r.get('id', 'unknown'))
-            doc_id = r.get('metadata', {}).get('doc_id', r.get('doc_id', 'unknown'))
-            order = r.get('metadata', {}).get('order', 'N/A')
-            rerank_score = r.get('rerank_score', 0)
-            text_content = r.get('text', '')
-            print(f"\n  [{i}] chunk_id={chunk_id}, doc_id={doc_id}, order={order}, rerank_score={rerank_score:.4f}")
-            print(f"      text: {text_content}")
-        print(f"{'='*60}\n")
-
-        elapsed = time.time() - start_time
-        print(f"混合检索完成: 向量{len(vector_results)} + 关键字{len(keyword_results)} + 图谱{len(graph_results)} "
-              f"→ 融合{len(fused_results)} → 重排序后{len(final_results)}条 (耗时 {elapsed:.2f}s)")
 
         return final_results
 

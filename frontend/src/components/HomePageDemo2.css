@@ -549,3 +549,167 @@
     height: 42px;
   }
 }
+
+/* ============================================
+   CLEAR KNOWLEDGE BUTTON
+   ============================================ */
+
+.abyss-clear-knowledge-btn {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background-color: rgba(5, 20, 30, 0.8);
+  border: 1px solid var(--emerald-primary);
+  border-radius: 8px;
+  color: var(--emerald-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.abyss-clear-knowledge-btn:hover:not(:disabled) {
+  background-color: var(--emerald-primary);
+  color: var(--void-0);
+  box-shadow: 0 0 20px var(--emerald-glow);
+}
+
+.abyss-clear-knowledge-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.abyss-clear-knowledge-btn svg {
+  flex-shrink: 0;
+}
+
+/* Confirm dialog */
+.abyss-confirm-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+}
+
+.abyss-confirm-dialog {
+  background-color: var(--void-2);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.abyss-confirm-dialog h3 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  letter-spacing: 1px;
+}
+
+.abyss-confirm-dialog p {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.abyss-confirm-dialog ul {
+  margin: 12px 0;
+  padding-left: 20px;
+}
+
+.abyss-confirm-dialog li {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.abyss-confirm-note {
+  color: var(--emerald-primary) !important;
+  font-size: 13px !important;
+  margin-top: 8px !important;
+}
+
+.abyss-confirm-dialog-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.abyss-confirm-btn-cancel,
+.abyss-confirm-btn-confirm {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.abyss-confirm-btn-cancel {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+}
+
+.abyss-confirm-btn-cancel:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.abyss-confirm-btn-confirm {
+  background-color: var(--emerald-primary);
+  border: 1px solid var(--emerald-primary);
+  color: var(--void-0);
+}
+
+.abyss-confirm-btn-confirm:hover:not(:disabled) {
+  background-color: var(--emerald-secondary);
+  box-shadow: 0 0 15px var(--emerald-glow);
+}
+
+.abyss-confirm-btn-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Spinner */
+.abyss-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: abyssSpin 0.6s linear infinite;
+}
+
+@keyframes abyssSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

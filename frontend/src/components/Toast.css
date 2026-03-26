@@ -1,0 +1,159 @@
+/* Toast 容器 */
+.toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: none;
+}
+
+/* Toast 基础样式 */
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 320px;
+  max-width: 480px;
+  padding: 16px 20px;
+  background: rgba(10, 10, 10, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+.toast-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.toast-hidden {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+/* Toast 类型样式 */
+.toast-success {
+  border-left: 4px solid #10b981;
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.2);
+}
+
+.toast-success .toast-icon {
+  color: #10b981;
+  filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.4));
+}
+
+.toast-error {
+  border-left: 4px solid #ef4444;
+  box-shadow: 0 8px 32px rgba(239, 68, 68, 0.2);
+}
+
+.toast-error .toast-icon {
+  color: #ef4444;
+  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.4));
+}
+
+.toast-warning {
+  border-left: 4px solid #f59e0b;
+  box-shadow: 0 8px 32px rgba(245, 158, 11, 0.2);
+}
+
+.toast-warning .toast-icon {
+  color: #f59e0b;
+  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.4));
+}
+
+.toast-info {
+  border-left: 4px solid #8b5cf6;
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.2);
+}
+
+.toast-info .toast-icon {
+  color: #8b5cf6;
+  filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.4));
+}
+
+/* Toast 图标 */
+.toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+/* Toast 消息 */
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+  font-family: 'Rajdhani', sans-serif;
+  color: #f0f0f0;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* Toast 关闭按钮 */
+.toast-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  color: rgba(240, 240, 240, 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.toast-close:hover {
+  color: rgba(240, 240, 240, 0.8);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+
+/* Toast 悬停效果 */
+.toast:hover {
+  background: rgba(15, 15, 15, 0.98);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.toast-success:hover {
+  box-shadow: 0 12px 40px rgba(16, 185, 129, 0.3);
+}
+
+.toast-error:hover {
+  box-shadow: 0 12px 40px rgba(239, 68, 68, 0.3);
+}
+
+.toast-warning:hover {
+  box-shadow: 0 12px 40px rgba(245, 158, 11, 0.3);
+}
+
+.toast-info:hover {
+  box-shadow: 0 12px 40px rgba(139, 92, 246, 0.3);
+}
+
+/* 响应式设计 */
+@media (max-width: 640px) {
+  .toast-container {
+    top: 16px;
+    right: 16px;
+    left: 16px;
+  }
+
+  .toast {
+    min-width: 0;
+    max-width: 100%;
+  }
+}

@@ -1,12 +1,11 @@
-// API 配置
-// Docker 部署时，window.__API_BASE_URL__ 会被替换为实际的后端地址
-// 本地开发时，使用 127.0.0.1:5000
-const getApiBaseUrl = (): string => {
-  // 如果占位符未被替换（本地开发环境），使用默认地址
-  if (window.__API_BASE_URL__ === '{{API_BASE_URL}}' || !window.__API_BASE_URL__) {
-    return 'http://127.0.0.1:5000';
+// API 配置 - 优先使用环境变量，否则使用默认值
+declare global {
+  interface Window {
+    __API_BASE_URL__?: string;
   }
-  return window.__API_BASE_URL__;
-};
+}
 
-export const API_BASE_URL = getApiBaseUrl();
+// 从 window 对象读取环境变量，如果不存在则使用默认值
+// Docker 环境：通过 docker-entrypoint.sh 注入到 index.html
+// 本地开发：使用 127.0.0.1:5000
+export const API_BASE_URL = window.__API_BASE_URL__ || 'http://127.0.0.1:5000';

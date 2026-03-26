@@ -32,7 +32,9 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # Default values
-DEFAULT_API_URL = "http://192.168.18.77:5000"
+DEFAULT_API_URL = "http://127.0.0.1:5000"
+# DEFAULT_API_URL = "http://192.168.18.77:5000"
+
 DEFAULT_TIMEOUT = 120
 
 
@@ -56,7 +58,7 @@ DEFAULT_TIMEOUT = 120
 def query_rag(
     question: str,
     api_url: str,
-    doc_id: Optional[str] = None,
+    kb_id: Optional[str] = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> str:
     """
@@ -65,7 +67,7 @@ def query_rag(
     Args:
         question: The user's question
         api_url: The RAG service endpoint
-        doc_id: Optional document ID to limit search scope
+        kb_id: Optional knowledge base ID to limit search scope
         timeout: Request timeout in seconds
 
     Returns:
@@ -75,10 +77,10 @@ def query_rag(
 
     url = f"{api_url}/api/chat"
     headers = {"Content-Type": "application/json"}
-    payload = {"message": question}
+    payload = {"question": question}
 
-    if doc_id:
-        payload["doc_id"] = doc_id
+    if kb_id:
+        payload["kb_id"] = kb_id
 
     try:
         response = requests.post(
@@ -91,13 +93,11 @@ def query_rag(
 
         result = response.json()
 
-        # Handle different response formats
-        if result.get("success") and "data" in result and "answer" in result["data"]:
-            return result["data"]["answer"]
-        elif result.get("code") == 0 and "data" in result and "answer" in result["data"]:
+        # Handle response format: {"code": 0, "message": "success", "data": {"answer": "..."}}
+        if result.get("code") == 0 and "data" in result and "answer" in result["data"]:
             return result["data"]["answer"]
         else:
-            return f"Error: Invalid response format - {json.dumps(result, ensure_ascii=False)}"
+            return f"Error: {result.get('message', 'Invalid response format')}"
 
     except requests.exceptions.Timeout:
         return f"Error: Request timeout after {timeout} seconds"
@@ -118,7 +118,7 @@ def main():
         epilog="""
 Examples:
   %(prog)s --question "What is RAG?"
-  %(prog)s -q "How to upload PDF?" --doc-id "doc_123"
+  %(prog)s -q "How to upload PDF?" --kb-id "kb_123"
   %(prog)s -q "Your question" --api-url "http://localhost:8080"
 
 Environment Variables:
@@ -133,9 +133,9 @@ Environment Variables:
         help='Your question in natural language'
     )
     parser.add_argument(
-        '--doc-id', '-d',
-        dest='doc_id',
-        help='Limit search to specific document ID'
+        '--kb-id', '-k',
+        dest='kb_id',
+        help='Limit search to specific knowledge base ID'
     )
     parser.add_argument(
         '--api-url', '-u',
@@ -166,7 +166,7 @@ Environment Variables:
     answer = query_rag(
         question=args.question,
         api_url=api_url,
-        doc_id=args.doc_id,
+        kb_id=args.kb_id,
         timeout=timeout
     )
 

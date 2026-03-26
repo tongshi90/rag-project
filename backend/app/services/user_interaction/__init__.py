@@ -6,24 +6,18 @@
 包含的子模块：
 -------------
 - question_splitter: 问题拆分（将复杂问题拆分为子问题）
-- entity_recognizer: 问题实体识别
 - query_encoder: 问题向量化
-- retrieval: 向量检索 + 重排序 + 混合检索
-- graph_retrieval: 图谱检索
-- context_enricher: 上下文增强
+- retrieval: 向量检索 + 重排序
 - generator: LLM 答案生成
+- intent_recognition: 意图识别（预测问题最相关的知识库）
 
 使用示例：
 ---------
 ```python
-from app.services.user_interaction import process_conversation, process_conversation_hybrid
+from app.services.user_interaction import process_conversation
 
 # 普通检索（向量 + 重排序）
 result = process_conversation("什么是RAG？它有哪些优势？")
-print(result['answer'])
-
-# 混合检索（向量 + 关键字 + 图谱）
-result = process_conversation_hybrid("什么是RAG？", doc_id="xxx")
 print(result['answer'])
 ```
 """
@@ -33,24 +27,22 @@ from .conversation_processor import (
     process_conversation,
     process_conversation_simple,
     chat,
-    process_conversation_hybrid,  # 新增
+    process_conversation_with_intent,  # 智能两阶段召回
 )
 
 # 单独使用各个步骤
 from .question_splitter import split_question
 from .query_encoder import encode_query, encode_queries
-from .retrieval import retrieve, batch_retrieve, HybridRetrievalPipeline  # 新增
+from .retrieval import retrieve, batch_retrieve
 from .generator import generate_answer, generate_answer_for_sub_questions
-from .entity_recognizer import QueryEntityRecognizer, recognize_query_entities  # 新增
-from .graph_retrieval import GraphRetriever, get_graph_retriever  # 新增
-from .context_enricher import ContextEnricher  # 新增
+from .intent_recognition import predict_knowledge_base, get_kb_id_by_name
 
 __all__ = [
     # 完整流程
     'process_conversation',
     'process_conversation_simple',
     'chat',
-    'process_conversation_hybrid',  # 新增
+    'process_conversation_with_intent',  # 智能两阶段召回
 
     # 单独步骤
     'split_question',
@@ -61,11 +53,7 @@ __all__ = [
     'generate_answer',
     'generate_answer_for_sub_questions',
 
-    # 新增模块
-    'HybridRetrievalPipeline',
-    'QueryEntityRecognizer',
-    'recognize_query_entities',
-    'GraphRetriever',
-    'get_graph_retriever',
-    'ContextEnricher',
+    # 意图识别
+    'predict_knowledge_base',
+    'get_kb_id_by_name',
 ]

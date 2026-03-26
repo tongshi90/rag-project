@@ -18,10 +18,10 @@ uv run {baseDir}/scripts/main.py --question "你的问题"
 
 ## 高级选项
 
-查询指定文档：
+查询指定知识库：
 
 ```bash
-uv run {baseDir}/scripts/main.py --question "问题" --doc-id "doc_123"
+uv run {baseDir}/scripts/main.py --question "问题" --kb-id "kb_123"
 ```
 
 自定义 API 端点：

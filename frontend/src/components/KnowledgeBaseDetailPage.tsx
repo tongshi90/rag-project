@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RetrievalTestPanel } from './RetrievalTestPanel';
 import { useConfirmDialog } from './ConfirmDialog';
+import { ToastContainer, useToast } from './Toast';
 import { apiService } from '../services/api';
 import type { FileInfo, KnowledgeBase, RetrievalTestHistory } from '../types';
 import { ChunkListDrawer } from './ChunkListDrawer';
@@ -18,6 +19,12 @@ export const KnowledgeBaseDetailPage: React.FC<KnowledgeBaseDetailPageProps> = (
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const pollingIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // 文件列表分页状态
+  const [fileCurrentPage, setFileCurrentPage] = useState(1);
+  const [fileTotal, setFileTotal] = useState(0);
+  const [fileTotalPages, setFileTotalPages] = useState(0);
+  const itemsPerPage = 10;
+
   // Chunk 抽屉状态
   const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
   const [showChunkDrawer, setShowChunkDrawer] = useState(false);
@@ -31,20 +38,25 @@ export const KnowledgeBaseDetailPage: React.FC<KnowledgeBaseDetailPageProps> = (
   const [currentPage, setCurrentPage] = useState(1);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyTotalPages, setHistoryTotalPages] = useState(0);
-  const itemsPerPage = 10;
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   // 确认弹窗
   const { confirm, DialogComponent } = useConfirmDialog();
 
+  // Toast 提示
+  const { toasts, showToast, removeToast } = useToast();
+
   // 加载知识库文件
-  const loadFiles = async () => {
+  const loadFiles = async (page: number = 1) => {
     setIsLoading(true);
     try {
-      const response = await apiService.getKnowledgeBaseFiles(kb.id);
+      const response = await apiService.getKnowledgeBaseFiles(kb.id, page, itemsPerPage);
       if (response.success && response.data) {
         const newFiles = response.data.files;
         setFiles(newFiles);
+        setFileTotal(response.data.total);
+        setFileTotalPages(response.data.totalPages);
+        setFileCurrentPage(response.data.page);
 
         // 检查是否有正在解析的文件
         const hasParsingFiles = newFiles.some(f => f.status === 'parsing');
@@ -70,10 +82,12 @@ export const KnowledgeBaseDetailPage: React.FC<KnowledgeBaseDetailPageProps> = (
 
     pollingIntervalRef.current = setInterval(async () => {
       try {
-        const response = await apiService.getKnowledgeBaseFiles(kb.id);
+        const response = await apiService.getKnowledgeBaseFiles(kb.id, fileCurrentPage, itemsPerPage);
         if (response.success && response.data) {
           const updatedFiles = response.data.files;
           setFiles(updatedFiles);
+          setFileTotal(response.data.total);
+          setFileTotalPages(response.data.totalPages);
 
           // 如果没有正在解析的文件，停止轮询
           if (!updatedFiles.some(f => f.status === 'parsing')) {
@@ -114,7 +128,7 @@ export const KnowledgeBaseDetailPage: React.FC<KnowledgeBaseDetailPageProps> = (
 
   // 初始加载
   useEffect(() => {
-    loadFiles();
+    loadFiles(1);
     loadRetrievalHistory();
 
     // 组件卸载时停止轮询
@@ -127,8 +141,8 @@ export const KnowledgeBaseDetailPage: React.FC<KnowledgeBaseDetailPageProps> = (
       try {
         const response = await apiService.uploadToKnowledgeBase(kb.id, file);
         if (response.success && response.data) {
-          setFiles(prev => [response.data!, ...prev]);
-          // 上传成功后立即开始轮询（因为新文件状态是parsing）
+          // 上传成功后重新加载第一页并开始轮询
+          loadFiles(1);
           startPolling();
         }
       } catch (error) {
@@ -156,7 +170,9 @@ export const KnowledgeBaseDetailPage: React.FC<KnowledgeBaseDetailPageProps> = (
     try {
       const response = await apiService.deleteKnowledgeBaseFile(kb.id, fileId);
       if (response.success) {
-        setFiles(prev => prev.filter(f => f.id !== fileId));
+        // 如果当前页只有一条数据且不是第一页，则返回上一页
+        const newPage = (files.length === 1 && fileCurrentPage > 1) ? fileCurrentPage - 1 : fileCurrentPage;
+        loadFiles(newPage);
       } else {
         await confirm('删除失败', response.error || '删除文件失败，请稍后重试', {
           confirmText: '确定',
@@ -174,10 +190,10 @@ export const KnowledgeBaseDetailPage: React.FC<KnowledgeBaseDetailPageProps> = (
 
   // 处理清空所有文件
   const handleClearAllFiles = async () => {
-    if (files.length === 0) return;
+    if (fileTotal === 0) return;
     const confirmed = await confirm(
       '清空所有文件',
-      `确定要删除知识库中的所有 ${files.length} 个文件吗？此操作不可恢复。`,
+      `确定要删除知识库中的所有 ${fileTotal} 个文件吗？此操作不可恢复。`,
       {
         confirmText: '清空',
         cancelText: '取消',
@@ -189,23 +205,16 @@ export const KnowledgeBaseDetailPage: React.FC<KnowledgeBaseDetailPageProps> = (
     try {
       const response = await apiService.deleteAllKnowledgeBaseFiles(kb.id);
       if (response.success) {
-        setFiles([]);
-        await confirm('清空成功', `已删除 ${response.data?.deletedCount || 0} 个文件`, {
-          confirmText: '确定',
-          type: 'info'
-        });
+        setFileCurrentPage(1);
+        loadFiles(1);
+        const deletedCount = response.data?.deletedCount || 0;
+        showToast(`已删除 ${deletedCount} 个文件`, 'success');
       } else {
-        await confirm('清空失败', response.error || '清空文件失败，请稍后重试', {
-          confirmText: '确定',
-          type: 'info'
-        });
+        showToast(response.error || '清空文件失败，请稍后重试', 'error');
       }
     } catch (error) {
       console.error('Failed to clear all files:', error);
-      await confirm('清空失败', '清空文件失败，请稍后重试', {
-        confirmText: '确定',
-        type: 'info'
-      });
+      showToast('清空文件失败，请稍后重试', 'error');
     }
   };
 
@@ -359,8 +368,9 @@ export const KnowledgeBaseDetailPage: React.FC<KnowledgeBaseDetailPageProps> = (
               <div className="kb-detail-empty-hint">点击上方按钮上传PDF文件</div>
             </div>
           ) : (
-            <div className="kb-file-list">
-              {files.map(file => (
+            <div className="kb-file-list-container">
+              <div className="kb-file-list">
+                {files.map(file => (
                 <div
                   key={file.id}
                   className={`kb-file-item ${file.status === 'completed' ? 'kb-file-item-clickable' : ''}`}
@@ -421,7 +431,33 @@ export const KnowledgeBaseDetailPage: React.FC<KnowledgeBaseDetailPageProps> = (
                     </button>
                   </div>
                 </div>
-              ))}
+                ))}
+              </div>
+              {fileTotalPages > 1 && (
+                <div className="kb-history-pagination">
+                  <button
+                    className="kb-history-page-btn"
+                    onClick={() => loadFiles(fileCurrentPage - 1)}
+                    disabled={fileCurrentPage === 1}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                  </button>
+                  <span className="kb-history-page-info">
+                    {fileCurrentPage} / {fileTotalPages}
+                  </span>
+                  <button
+                    className="kb-history-page-btn"
+                    onClick={() => loadFiles(fileCurrentPage + 1)}
+                    disabled={fileCurrentPage === fileTotalPages}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -577,6 +613,7 @@ export const KnowledgeBaseDetailPage: React.FC<KnowledgeBaseDetailPageProps> = (
       )}
 
       <DialogComponent />
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 };

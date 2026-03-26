@@ -289,7 +289,21 @@ def _call_llm_for_merge_analysis(chunks: List[Dict]) -> Optional[List[str]]:
             {"role": "user", "content": prompt}
         ]
 
+        print(f"\n{'='*60}")
+        print(f"【LLM 合并分析请求】")
+        print(f"{'='*60}")
+        print(f"涉及 chunks: {[c.get('chunk_id') for c in chunks]}")
+        print(f"\n>>> 提交给 LLM 的 Chunk 内容 <<<")
+        print(f"{'─'*60}")
+        print(chunks_content)
+        print(f"{'─'*60}")
+
         response = llm.chat(messages, temperature=0.1)
+
+        print(f"\n>>> LLM 原始返回结果 <<<")
+        print(f"{'─'*60}")
+        print(response)
+        print(f"{'─'*60}")
 
         # 解析 JSON 响应
         response = response.strip()
@@ -305,13 +319,24 @@ def _call_llm_for_merge_analysis(chunks: List[Dict]) -> Optional[List[str]]:
         result = json.loads(response)
         fragments = result.get('split_at', [])
 
+        print(f"\n>>> LLM 解析结果 <<<")
+        print(f"{'─'*60}")
+        if not fragments:
+            print(f"建议: 合并为一个分片")
+        else:
+            print(f"建议: 合并后按以下位置拆分:")
+            for i, frag in enumerate(fragments, 1):
+                print(f"  切分点 {i}: \"{frag}\"")
+        print(f"{'='*60}\n")
+
         if not fragments:
             return []
 
         return fragments
 
     except Exception as e:
-        print(f"LLM 调用失败 (merge analysis): {e}")
+        print(f"  ❌ LLM 调用失败 (merge analysis): {e}")
+        print(f"{'─'*50}\n")
         return None
 
 
@@ -336,7 +361,26 @@ def _call_llm_for_split_analysis(chunk: Dict) -> Optional[List[str]]:
             {"role": "user", "content": prompt}
         ]
 
+        print(f"\n{'='*60}")
+        print(f"【LLM 拆分分析请求】")
+        print(f"{'='*60}")
+        print(f"Chunk ID: {chunk_id}")
+        print(f"标题路径: {title_str}")
+        print(f"内容长度: {len(text)} 字符")
+        print(f"\n>>> 提交给 LLM 的 Chunk 内容 <<<")
+        print(f"{'─'*60}")
+        print(f"**Chunk ID:** {chunk_id}")
+        print(f"**标题路径:** {title_str}")
+        print(f"**内容:**")
+        print(text)
+        print(f"{'─'*60}")
+
         response = llm.chat(messages, temperature=0.1)
+
+        print(f"\n>>> LLM 原始返回结果 <<<")
+        print(f"{'─'*60}")
+        print(response)
+        print(f"{'─'*60}")
 
         response = response.strip()
         if "```json" in response:
@@ -351,13 +395,24 @@ def _call_llm_for_split_analysis(chunk: Dict) -> Optional[List[str]]:
         result = json.loads(response)
         fragments = result.get('split_at', [])
 
+        print(f"\n>>> LLM 解析结果 <<<")
+        print(f"{'─'*60}")
+        if not fragments:
+            print(f"建议: 保持原样，不拆分")
+        else:
+            print(f"建议: 按以下位置拆分:")
+            for i, frag in enumerate(fragments, 1):
+                print(f"  切分点 {i}: \"{frag}\"")
+        print(f"{'='*60}\n")
+
         if not fragments:
             return []
 
         return fragments
 
     except Exception as e:
-        print(f"LLM 调用失败 (split analysis): {e}")
+        print(f"  ❌ LLM 调用失败 (split analysis): {e}")
+        print(f"{'─'*50}\n")
         return None
 
 
@@ -441,7 +496,7 @@ def _print_result_detail(result: Dict[str, Any], chunks: List[Dict], show_conten
 # 主优化函数
 # ============================================
 
-def optimize_chunks(chunks: List[Dict], min_risk_score: int = 60, show_content: bool = True) -> List[Dict]:
+def optimize_chunks(chunks: List[Dict], min_risk_score: int = 40, show_content: bool = True) -> List[Dict]:
     """
     对分片列表进行优化分析（主入口函数）
 

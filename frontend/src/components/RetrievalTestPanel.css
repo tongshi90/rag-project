@@ -252,6 +252,37 @@
   white-space: pre-wrap;
 }
 
+.chunk-content-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chunk-content-expand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 8px;
+  color: var(--magenta-primary);
+  font-size: 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.chunk-content-expand:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: var(--magenta-primary);
+}
+
+.chunk-content-expand svg {
+  flex-shrink: 0;
+}
+
 .chunk-card-metadata {
   display: flex;
   flex-wrap: wrap;

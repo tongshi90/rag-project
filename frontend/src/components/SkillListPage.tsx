@@ -327,7 +327,6 @@ export const SkillListPage: React.FC<SkillListPageProps> = ({ onBackToHome: _onB
             <div className="skill-cards-grid">
               {filteredSkills.map((skill) => (
                 <div key={skill.id} className="skill-card" onClick={() => {
-                  console.log('Card clicked:', skill.title);
                   if (onSelectSkill) {
                     onSelectSkill(skill);
                   }

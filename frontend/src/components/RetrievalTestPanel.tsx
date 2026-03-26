@@ -1,5 +1,6 @@
 import React, { useState, useRef, useImperativeHandle, forwardRef } from 'react';
 import type { RetrievalTestRequest, RetrievalTestResponse } from '../types';
+import { API_BASE_URL } from '../config';
 import './RetrievalTestPanel.css';
 
 interface RetrievalTestPanelProps {
@@ -16,6 +17,8 @@ export const RetrievalTestPanel = forwardRef<RetrievalTestPanelRef, RetrievalTes
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [results, setResults] = useState<RetrievalTestResponse | null>(null);
+    const [currentQuery, setCurrentQuery] = useState(''); // 当前正在查询的文本
+    const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set()); // 跟踪展开的chunk
     const resultsEndRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -26,12 +29,45 @@ export const RetrievalTestPanel = forwardRef<RetrievalTestPanelRef, RetrievalTes
       }
     }));
 
+    // 切换chunk展开状态
+    const toggleChunkExpand = (chunkId: string) => {
+      setExpandedChunks(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(chunkId)) {
+          newSet.delete(chunkId);
+        } else {
+          newSet.add(chunkId);
+        }
+        return newSet;
+      });
+    };
+
+    // 获取显示的文本（限制5行）
+    const getDisplayText = (text: string, chunkId: string): string => {
+      if (!text) return '无内容';
+      if (expandedChunks.has(chunkId)) return text;
+
+      const lines = text.split('\n');
+      if (lines.length <= 5) return text;
+
+      return lines.slice(0, 5).join('\n');
+    };
+
+    // 检查是否需要展开
+    const needsExpand = (text: string): boolean => {
+      if (!text) return false;
+      const lines = text.split('\n');
+      return lines.length > 5;
+    };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim() || isLoading) return;
 
     const query = inputValue.trim();
-    setInputValue('');
+    setInputValue('');  // 清空输入框
+    setCurrentQuery(query);  // 保存当前查询文本
+    setResults(null);  // 清除上一次的结果
     setIsLoading(true);
 
     // 通知父组件添加到历史记录
@@ -46,7 +82,7 @@ export const RetrievalTestPanel = forwardRef<RetrievalTestPanelRef, RetrievalTes
       };
 
       // 调用召回测试API
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000'}/api/retrieval-test`, {
+      const response = await fetch(`${API_BASE_URL}/api/retrieval-test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
@@ -114,10 +150,6 @@ export const RetrievalTestPanel = forwardRef<RetrievalTestPanelRef, RetrievalTes
                         <span className="chunk-id-value">{chunk.chunkId || 'N/A'}</span>
                       </div>
                       <div className="chunk-card-scores">
-                        <span className="chunk-score">
-                          <span className="score-label">原始分数:</span>
-                          <span className="score-value">{(chunk.score ?? 0).toFixed(4)}</span>
-                        </span>
                         {chunk.rerankScore !== undefined && (
                           <span className="chunk-score">
                             <span className="score-label">重排分数:</span>
@@ -127,15 +159,35 @@ export const RetrievalTestPanel = forwardRef<RetrievalTestPanelRef, RetrievalTes
                       </div>
                     </div>
                     <div className="chunk-card-content">
-                      {chunk.text || '无内容'}
+                      <div className="chunk-content-text">
+                        {getDisplayText(chunk.text || '', chunk.chunkId || index.toString())}
+                      </div>
+                      {needsExpand(chunk.text || '') && !expandedChunks.has(chunk.chunkId || index.toString()) && (
+                        <div className="chunk-content-expand" onClick={() => toggleChunkExpand(chunk.chunkId || index.toString())}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                          </svg>
+                          <span>点击展开全部</span>
+                        </div>
+                      )}
+                      {expandedChunks.has(chunk.chunkId || index.toString()) && (
+                        <div className="chunk-content-expand" onClick={() => toggleChunkExpand(chunk.chunkId || index.toString())}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="18 15 12 9 6 15"></polyline>
+                          </svg>
+                          <span>点击收起</span>
+                        </div>
+                      )}
                     </div>
                     <div className="chunk-card-metadata">
-                      <span className="metadata-item">
+                      <span className="metadata-item doc-name-item" title={chunk.metadata?.docName || ''}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{verticalAlign: 'middle', marginRight: '4px'}}>
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                           <polyline points="14 2 14 8 20 8"></polyline>
                         </svg>
-                        文档 ID: {chunk.metadata?.docId || 'N/A'}
+                        {chunk.metadata?.docName && chunk.metadata.docName.length > 20
+                          ? chunk.metadata.docName.slice(0, 20) + '...'
+                          : chunk.metadata?.docName || 'N/A'}
                       </span>
                       <span className="metadata-item">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{verticalAlign: 'middle', marginRight: '4px'}}>
@@ -149,21 +201,6 @@ export const RetrievalTestPanel = forwardRef<RetrievalTestPanelRef, RetrievalTes
                           <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path>
                         </svg>
                         序号: {chunk.metadata?.order ?? 'N/A'}
-                      </span>
-                      <span className="metadata-item">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{verticalAlign: 'middle', marginRight: '4px'}}>
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                        类型: {chunk.metadata?.type || 'N/A'}
-                      </span>
-                      <span className="metadata-item">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{verticalAlign: 'middle', marginRight: '4px'}}>
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                          <polyline points="7 10 12 15 17 10"></polyline>
-                          <line x1="12" y1="15" x2="12" y2="3"></line>
-                        </svg>
-                        长度: {chunk.metadata?.length ?? 'N/A'}
                       </span>
                     </div>
                   </div>
@@ -182,7 +219,7 @@ export const RetrievalTestPanel = forwardRef<RetrievalTestPanelRef, RetrievalTes
                   <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
               </div>
-              <div className="retrieval-query-text">{inputValue}</div>
+              <div className="retrieval-query-text">{currentQuery}</div>
             </div>
             <div className="retrieval-loading-spinner">
               <div className="spinner"></div>

@@ -9,8 +9,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Orbitron:wght@400;500;600;700;800&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- 配置文件必须在 main.tsx 之前加载 -->
-    <script src="/config.js"></script>
+    <!-- API 配置占位符，Docker 启动时会替换 -->
+    <script>
+      // 如果是 Docker 环境，{{API_BASE_URL}} 会被 sed 替换为实际值
+      // 否则设置为 undefined，让 config.ts 使用默认值
+      const placeholder = '{{API_BASE_URL}}';
+      window.__API_BASE_URL__ = placeholder.startsWith('{{') ? undefined : placeholder;
+    </script>
   </head>
   <body>
     <div id="root"></div>

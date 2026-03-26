@@ -11,9 +11,13 @@
 """
 
 import time
+import logging
 from typing import List, Dict, Optional, Any
 from .encoder import EmbeddingEncoder
 from .vector_store import VectorStore
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 class BatchProcessor:
@@ -74,32 +78,16 @@ class BatchProcessor:
             ValueError: 当处理失败时抛出异常
         """
         start_time = time.time()
+        actual_doc_id = doc_id or (chunks[0].get('doc_id') if chunks else 'unknown')
 
         # 预处理：验证和清理数据
         valid_chunks = self._preprocess_chunks(chunks, doc_id)
 
         if not valid_chunks:
+            logger.error(f"[批量向量化] 没有有效的 chunks 可供处理 (输入: {len(chunks)})")
             raise ValueError("没有有效的 chunks 可供处理")
 
         total_count = len(valid_chunks)
-
-        if self.show_progress:
-            print(f"\n{'='*50}")
-            print(f"开始批量向量化处理")
-            print(f"{'='*50}")
-            print(f"总分片数: {total_count}")
-            print(f"批处理大小: {self.batch_size}")
-            print(f"批次数: {(total_count + self.batch_size - 1) // self.batch_size}")
-            print()
-
-        # 获取向量维度（用于验证）
-        try:
-            vector_dim = encoder.get_vector_dim()
-            if self.show_progress:
-                print(f"向量维度: {vector_dim}")
-        except Exception as e:
-            if self.show_progress:
-                print(f"警告: 无法获取向量维度: {e}")
 
         # 批量编码
         encoded_chunks = self._encode_chunks(valid_chunks, encoder)
@@ -120,14 +108,9 @@ class BatchProcessor:
             "elapsed_time": elapsed
         }
 
-        if self.show_progress:
-            print(f"\n{'='*50}")
-            print(f"批量向量化完成")
-            print(f"{'='*50}")
-            print(f"成功: {result['success_count']}/{result['total_chunks']}")
-            print(f"耗时: {elapsed:.2f} 秒")
-            print(f"向量库总量: {stats.get('total_count', 0)}")
-            print()
+        # 只打印最终结果
+        logger.info(f"向量化完成: 文档 {actual_doc_id}, 成功 {result['success_count']}/{result['total_chunks']} 个 chunks, "
+                   f"向量库总量: {stats.get('total_count', 0)}, 耗时: {elapsed:.2f}s")
 
         return result
 
@@ -193,13 +176,8 @@ class BatchProcessor:
             valid_chunks.append(chunk)
 
         # 报告无效 chunks
-        if invalid_chunks and self.show_progress:
-            print(f"警告: 发现 {len(invalid_chunks)} 个无效 chunks:")
-            for item in invalid_chunks[:5]:  # 只显示前5个
-                print(f"  - 索引 {item.get('index')}: {item.get('reason')}")
-            if len(invalid_chunks) > 5:
-                print(f"  - ... 还有 {len(invalid_chunks) - 5} 个")
-            print()
+        if invalid_chunks:
+            logger.warning(f"[批量向量化] 发现 {len(invalid_chunks)} 个无效 chunks")
 
         return valid_chunks
 
@@ -261,13 +239,8 @@ class BatchProcessor:
             ValueError: 当存储失败时
         """
         try:
-            if self.show_progress:
-                print(f"\n正在存储到向量数据库...")
-
             count = vector_store.add_chunks(chunks)
-
-            if self.show_progress:
-                print(f"成功存储 {count} 个 chunks")
+            logger.debug(f"[批量向量化] 成功存储 {count} 个 chunks")
 
         except ValueError as e:
             # 存储失败，抛出异常

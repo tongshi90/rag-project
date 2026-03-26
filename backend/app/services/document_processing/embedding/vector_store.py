@@ -12,12 +12,16 @@
 """
 
 import os
+import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 import chromadb
 from chromadb.config import Settings
 
 from app.config.paths import get_vector_db_path
+
+# 配置日志
+logger = logging.getLogger(__name__)
 
 
 class VectorStore:
@@ -81,7 +85,6 @@ class VectorStore:
         try:
             # 尝试获取已存在的集合
             collection = self.client.get_collection(name=self.collection_name)
-            print(f"加载现有向量集合: {self.collection_name}")
             return collection
         except Exception:
             # 集合不存在，创建新集合
@@ -120,6 +123,7 @@ class VectorStore:
         embeddings = []
         documents = []
         metadatas = []
+        doc_ids = set()
 
         for chunk in chunks:
             # 验证必需字段
@@ -129,6 +133,7 @@ class VectorStore:
             doc_id = chunk.get('doc_id')
 
             if not chunk_id or not embedding or not text or not doc_id:
+                logger.error(f"[向量存储] chunk 缺少必需字段: {chunk}")
                 raise ValueError(
                     f"chunk 缺少必需字段 (chunk_id, embedding, text, doc_id): {chunk}"
                 )
@@ -136,8 +141,10 @@ class VectorStore:
             ids.append(chunk_id)
             embeddings.append(embedding)
             documents.append(text)
+            doc_ids.add(doc_id)
 
             # 构建元数据
+            title_path = chunk.get('title_path', [])
             metadata = {
                 'doc_id': str(doc_id),
                 'order': int(chunk.get('order', 0)),
@@ -150,6 +157,11 @@ class VectorStore:
             kb_id = chunk.get('kb_id')
             if kb_id:
                 metadata['kb_id'] = str(kb_id)
+
+            # title_path 转换为 JSON 字符串存储（ChromaDB 不支持空列表）
+            if title_path and len(title_path) > 0:
+                import json
+                metadata['title_path'] = json.dumps(title_path, ensure_ascii=False)
 
             # bbox 可选
             bbox = chunk.get('bbox')
@@ -169,6 +181,7 @@ class VectorStore:
             return len(chunks)
 
         except Exception as e:
+            logger.error(f"[向量存储] 添加 chunks 失败: {str(e)}, chunks: {len(chunks)}, 文档: {doc_ids}")
             raise ValueError(f"添加 chunks 到向量数据库失败: {str(e)}")
 
     def delete_by_doc_id(self, doc_id: str) -> int:
@@ -348,11 +361,21 @@ class VectorStore:
 
             chunks = []
             if results and results['ids']:
+                import json
                 for i, chunk_id in enumerate(results['ids']):
+                    metadata = results['metadatas'][i] if results['metadatas'] else {}
+
+                    # 解析 title_path JSON 字符串回列表
+                    if 'title_path' in metadata and isinstance(metadata['title_path'], str):
+                        try:
+                            metadata['title_path'] = json.loads(metadata['title_path'])
+                        except:
+                            metadata['title_path'] = []
+
                     chunk = {
                         'chunk_id': chunk_id,
                         'text': results['documents'][i] if results['documents'] else '',
-                        'metadata': results['metadatas'][i] if results['metadatas'] else {}
+                        'metadata': metadata
                     }
                     chunks.append(chunk)
 

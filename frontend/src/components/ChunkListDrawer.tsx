@@ -22,7 +22,7 @@ export const ChunkListDrawer: React.FC<ChunkListDrawerProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [selectedChunk, setSelectedChunk] = useState<FileChunk | null>(null);
+  const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set()); // 跟踪展开的chunk
 
   // 加载 chunk 列表
   const loadChunks = async () => {
@@ -48,6 +48,34 @@ export const ChunkListDrawer: React.FC<ChunkListDrawerProps> = ({
   useEffect(() => {
     loadChunks();
   }, [isOpen, kbId, fileId]);
+
+  // 切换chunk展开状态
+  const toggleChunkExpand = (chunkId: string) => {
+    setExpandedChunks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(chunkId)) {
+        newSet.delete(chunkId);
+      } else {
+        newSet.add(chunkId);
+      }
+      return newSet;
+    });
+  };
+
+  // 获取显示的文本（限制150字符）
+  const getDisplayText = (text: string, chunkId: string): string => {
+    if (!text) return '无内容';
+    if (expandedChunks.has(chunkId)) return text;
+
+    if (text.length <= 150) return text;
+    return text.substring(0, 150) + '...';
+  };
+
+  // 检查是否需要展开
+  const needsExpand = (text: string): boolean => {
+    if (!text) return false;
+    return text.length > 150;
+  };
 
   // 过滤 chunks
   const filteredChunks = chunks.filter(chunk =>
@@ -185,11 +213,7 @@ export const ChunkListDrawer: React.FC<ChunkListDrawerProps> = ({
               ) : (
                 <div className="drawer-chunk-items">
                   {filteredChunks.map((chunk) => (
-                    <div
-                      key={chunk.chunkId}
-                      className="drawer-chunk-item"
-                      onClick={() => setSelectedChunk(selectedChunk?.chunkId === chunk.chunkId ? null : chunk)}
-                    >
+                    <div key={chunk.chunkId} className="drawer-chunk-item">
                       <div className="drawer-chunk-header">
                         <div className="drawer-chunk-order">
                           <span className="drawer-chunk-number">#{chunk.order + 1}</span>
@@ -202,17 +226,52 @@ export const ChunkListDrawer: React.FC<ChunkListDrawerProps> = ({
                           <span className="drawer-chunk-length">{chunk.length} 字符</span>
                         </div>
                       </div>
-                      <div className="drawer-chunk-text">
-                        {selectedChunk?.chunkId === chunk.chunkId
-                          ? chunk.text
-                          : (chunk.text.length > 150
-                              ? chunk.text.substring(0, 150) + '...'
-                              : chunk.text)
-                        }
+
+                      {/* Chunk 详情内容 */}
+                      <div className="drawer-chunk-detail">
+                        {/* 标题路径 */}
+                        <div className="drawer-chunk-title-path">
+                          <span className="drawer-chunk-label">标题路径：</span>
+                          <span className="drawer-chunk-value">
+                            {chunk.titlePath && chunk.titlePath.length > 0
+                              ? chunk.titlePath.join(' > ')
+                              : '(无标题)'}
+                          </span>
+                        </div>
+
+                        {/* 标题 */}
+                        <div className="drawer-chunk-title">
+                          <span className="drawer-chunk-label">标题：</span>
+                          <span className="drawer-chunk-value">
+                            {chunk.titlePath && chunk.titlePath.length > 0
+                              ? chunk.titlePath[chunk.titlePath.length - 1]
+                              : '(无标题)'}
+                          </span>
+                        </div>
+
+                        {/* 正文内容 */}
+                        <div className="drawer-chunk-content">
+                          <div className="drawer-chunk-content-label">正文内容:</div>
+                          <div className="drawer-chunk-content-text">
+                            {getDisplayText(chunk.text || '', chunk.chunkId)}
+                          </div>
+                        </div>
                       </div>
-                      {chunk.text.length > 150 && selectedChunk?.chunkId !== chunk.chunkId && (
-                        <div className="drawer-chunk-expand">
-                          点击展开全部
+
+                      {needsExpand(chunk.text || '') && !expandedChunks.has(chunk.chunkId) && (
+                        <div className="drawer-chunk-expand" onClick={() => toggleChunkExpand(chunk.chunkId)}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                          </svg>
+                          <span>点击展开全部</span>
+                        </div>
+                      )}
+                      {expandedChunks.has(chunk.chunkId) && (
+                        <div className="drawer-chunk-expand" onClick={() => toggleChunkExpand(chunk.chunkId)}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="18 15 12 9 6 15"></polyline>
+                          </svg>
+                          <span>点击收起</span>
                         </div>
                       )}
                     </div>

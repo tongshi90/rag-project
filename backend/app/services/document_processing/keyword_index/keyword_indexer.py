@@ -261,3 +261,9 @@ def extract_keywords(text: str, top_k: int = 10) -> List[str]:
         return jieba.analyse.extract_tags(text, topK=top_k)
     except Exception:
         return []
+
+
+def reset_keyword_indexer():
+    """重置关键字索引器实例（用于清理数据）"""
+    global _keyword_indexer_instance
+    _keyword_indexer_instance = None

@@ -201,20 +201,37 @@ def delete_knowledge_base(kb_id):
 @api_bp.route('/knowledge-bases/<kb_id>/files', methods=['GET'])
 def get_knowledge_base_files(kb_id):
     """
-    获取知识库下的文件列表
+    获取知识库下的文件列表（支持分页）
+
+    Query params:
+        - page: 页码（默认1）
+        - pageSize: 每页数量（默认10）
     """
     # 验证知识库存在
     kb = knowledge_base_db.get_knowledge_base_by_id(kb_id)
     if not kb:
         return jsonify({'success': False, 'error': '知识库不存在'}), 404
 
-    files = db.get_files_by_kb_id(kb_id)
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('pageSize', 10, type=int)
+
+    offset = (page - 1) * page_size
+
+    # 获取总数
+    all_files = db.get_files_by_kb_id(kb_id)
+    total = len(all_files)
+
+    # 分页返回
+    files = all_files[offset:offset + page_size]
 
     return jsonify({
         'success': True,
         'data': {
             'files': files,
-            'total': len(files)
+            'total': total,
+            'page': page,
+            'pageSize': page_size,
+            'totalPages': (total + page_size - 1) // page_size
         }
     })
 
@@ -378,7 +395,8 @@ def get_file_chunks(kb_id, file_id):
                 'order': metadata.get('order', 0),
                 'page': metadata.get('page', 0),
                 'type': metadata.get('type', 'text'),
-                'length': metadata.get('length', 0)
+                'length': metadata.get('length', 0),
+                'titlePath': metadata.get('title_path', [])  # 添加标题路径
             })
 
         return jsonify({
