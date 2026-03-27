@@ -14,10 +14,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onSelectPage }) => {
     setIsClearing(true);
     try {
       const result = await apiService.clearKnowledgeData();
-      if (result.success) {
-        alert(`知识库数据已清空！\n\n已清理：\n${result.cleared.join('\n')}`);
+      if (result.success && result.data) {
+        alert(`知识库数据已清空！\n\n已清理：\n${result.data.cleared.join('\n')}`);
       } else {
-        alert(`清理失败：${result.errors?.join('\n') || '未知错误'}`);
+        alert(`清理失败：${result.data?.errors?.join('\n') || result.error || '未知错误'}`);
       }
     } catch (error) {
       alert(`清理失败：${error}`);
