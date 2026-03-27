@@ -88,8 +88,12 @@ class LLMBasedSplitter(QuestionSplitter):
             messages = [{"role": "user", "content": prompt}]
             response = self.chat_model.chat(messages, temperature=temperature)
 
-            # 解析 LLM 响应
-            result = json.loads(response)
+            # 解析 LLM 响应 - 提取 JSON 部分
+            result = _extract_json(response)
+            if result is None:
+                print(f"LLM 返回格式错误: 无法解析 JSON，返回原问题")
+                return [question]
+
             sub_questions = result.get("sub_questions", [question])
 
             # 验证返回结果
@@ -101,13 +105,43 @@ class LLMBasedSplitter(QuestionSplitter):
 
             return cleaned_questions if cleaned_questions else [question]
 
-        except json.JSONDecodeError as e:
-            print(f"LLM 返回格式错误: {e}，返回原问题")
-            return [question]
-
         except Exception as e:
             print(f"LLM 拆分失败: {e}，返回原问题")
             return [question]
+
+
+def _extract_json(response: str):
+    """
+    从 LLM 响应中提取 JSON 对象
+
+    Args:
+        response: LLM 原始响应字符串
+
+    Returns:
+        解析后的字典，如果解析失败返回 None
+    """
+    if not response:
+        return None
+
+    # 查找第一个 { 和最后一个 }
+    response = response.strip()
+    start_idx = response.find('{')
+    end_idx = response.rfind('}')
+
+    if start_idx == -1 or end_idx == -1:
+        return None
+
+    json_str = response[start_idx:end_idx + 1]
+
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        # 尝试修复常见的 JSON 格式问题
+        try:
+            cleaned = json_str.replace('\n', ' ').replace('\r', '')
+            return json.loads(cleaned)
+        except:
+            return None
 
 
 def get_question_splitter(chat_model=None) -> LLMBasedSplitter:
